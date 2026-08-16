@@ -1,4 +1,4 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import ContextTypes
 import asyncio
 from datetime import datetime
@@ -12,14 +12,10 @@ from keyboards import (
 from utils import create_widget_url
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start"""
     user = update.effective_user
     telegram_id = user.id
     
-    # Регистрируем пользователя
     db_user = get_user(telegram_id)
-    
-    # Генерируем токен для виджета
     widget_token = generate_widget_token(telegram_id)
     
     welcome_message = (
@@ -29,13 +25,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• 🧛 Торговец из Бездны (Baro Ki'Teer)\n"
         f"• 💠 Разрывы Бездны\n"
         f"• ⚔️ Вторжения (включая реакторы и катализаторы)\n"
-        f"• 🎯 Сортировка\n"
-        f"• ⚡ Арбитраж (с типом миссии и тиром карты)\n"
+        f"• 🎯 Вылазка\n"
+        f"• ⚡ Арбитраж\n"
         f"• 🔥 Охота на Архонтов\n"
         f"• 🗡️ Стальной Путь\n"
         f"• 🚨 Тревоги\n"
-        f"• 🌍 Циклы и погода (Земля, Венера, Деймос, Дувири)\n"
-        f"• 🛒 Торговцы (Эрго Гласт, Элеонора) с характеристиками\n\n"
+        f"• 🌍 Циклы и погода (Земля, Дувири)\n"
+        f"• 🛒 Торговцы\n"
+        f"• 🌙 Ночная Волна\n\n"
         f"**📱 Виджет для смартфона:**\n"
         f"Перейди по ссылке для создания виджета:\n"
         f"`{create_widget_url(widget_token)}`"
@@ -48,7 +45,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /help"""
     help_text = (
         "📖 **Помощь по боту**\n\n"
         "**Основные команды:**\n"
@@ -61,20 +57,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Торговец из Бездны - прибытие и инвентарь\n"
         "• Разрывы Бездны - активные миссии\n"
         "• Вторжения - активные вторжения с наградами\n"
-        "• Сортировка - ежедневное задание\n"
-        "• Арбитраж - доступные миссии с подробностями\n"
+        "• Вылазка - ежедневное задание\n"
+        "• Арбитраж - доступные миссии\n"
         "• Охота на Архонтов - еженедельное задание\n"
         "• Стальной Путь - ротационные награды\n"
         "• Тревоги - активные миссии\n"
-        "• Циклы - смена дня/ночи, погоды\n"
-        "• Торговцы - обновление инвентаря\n\n"
-        "**💡 Совет:**\n"
-        "Используй виджет для быстрого доступа к уведомлениям!"
+        "• Циклы - смена дня/ночи, настроение Дувири\n"
+        "• Торговцы - обновление инвентаря\n"
+        "• Ночная Волна - сезонные награды"
     )
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /settings"""
     telegram_id = update.effective_user.id
     user = get_user(telegram_id)
     
@@ -86,7 +80,6 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def widget_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /widget"""
     telegram_id = update.effective_user.id
     user = get_user(telegram_id)
     
@@ -106,14 +99,12 @@ async def widget_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "1. Скопируй ссылку\n"
         "2. На телефоне добавь виджет 'Web View' или 'URL'\n"
         "3. Вставь ссылку\n"
-        "4. Настрой размер виджета\n\n"
-        "Виджет будет показывать последние уведомления!"
+        "4. Настрой размер виджета"
     )
     
     await update.message.reply_text(message, parse_mode='Markdown')
 
 async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /info"""
     await update.message.reply_text(
         "📊 **Выбери информацию:**",
         parse_mode='Markdown',
@@ -121,18 +112,15 @@ async def info_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик нажатий на кнопки"""
     query = update.callback_query
     await query.answer()
     
     telegram_id = update.effective_user.id
     callback_data = query.data
     
-    # Обработка основных навигационных кнопок
     if callback_data == 'back_to_main':
         await query.edit_message_text(
-            "👋 **Главное меню**\n\n"
-            "Выбери действие:",
+            "👋 **Главное меню**\n\nВыбери действие:",
             parse_mode='Markdown',
             reply_markup=get_main_menu()
         )
@@ -140,8 +128,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     elif callback_data == 'settings':
         await query.edit_message_text(
-            "⚙️ **Настройки**\n\n"
-            "Выбери категорию:",
+            "⚙️ **Настройки**\n\nВыбери категорию:",
             parse_mode='Markdown',
             reply_markup=get_settings_menu()
         )
@@ -150,8 +137,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif callback_data == 'settings_main':
         user = get_user(telegram_id)
         await query.edit_message_text(
-            "⚙️ **Основные настройки**\n\n"
-            "Включи/выключи нужные уведомления:",
+            "⚙️ **Основные настройки**\n\nВключи/выключи нужные уведомления:",
             parse_mode='Markdown',
             reply_markup=get_status_buttons(user.__dict__, 'main')
         )
@@ -160,8 +146,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif callback_data == 'settings_cycles':
         user = get_user(telegram_id)
         await query.edit_message_text(
-            "🌍 **Циклы и погода**\n\n"
-            "Настрой уведомления о смене циклов:",
+            "🌍 **Циклы и погода**\n\nНастрой уведомления о смене циклов:",
             parse_mode='Markdown',
             reply_markup=get_status_buttons(user.__dict__, 'cycles')
         )
@@ -170,8 +155,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif callback_data == 'settings_traders':
         user = get_user(telegram_id)
         await query.edit_message_text(
-            "🛒 **Торговцы**\n\n"
-            "Настрой уведомления о торговцах:",
+            "🛒 **Торговцы**\n\nНастрой уведомления о торговцах:",
             parse_mode='Markdown',
             reply_markup=get_status_buttons(user.__dict__, 'traders')
         )
@@ -185,22 +169,35 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Обработка переключения уведомлений
+    elif callback_data == 'info_cycles':
+        await query.edit_message_text(
+            "🌍 **Выбери цикл:**",
+            parse_mode='Markdown',
+            reply_markup=get_cycle_menu()
+        )
+        return
+    
+    elif callback_data == 'info_traders':
+        await query.edit_message_text(
+            "🛒 **Выбери торговца:**",
+            parse_mode='Markdown',
+            reply_markup=get_trader_menu()
+        )
+        return
+    
     elif callback_data.startswith('toggle_'):
         setting_name = callback_data.replace('toggle_', '')
         user = get_user(telegram_id)
         
-        # Инвертируем значение
         current_value = getattr(user, setting_name, True)
         new_value = not current_value
         
         update_user_settings(telegram_id, **{setting_name: new_value})
         
-        # Определяем категорию для возврата
         if setting_name.startswith('notify_'):
             if setting_name in ['notify_earth_cycle', 'notify_venus_weather', 'notify_deimos_cycle', 'notify_duviri_mood']:
                 category = 'cycles'
-            elif setting_name in ['notify_ergo_glast', 'notify_eleonora']:
+            elif setting_name in ['notify_ergo_glast', 'notify_eleonora', 'notify_nightwave']:
                 category = 'traders'
             else:
                 category = 'main'
@@ -209,26 +206,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             status_text = "✅ Включено" if new_value else "❌ Выключено"
             
             await query.edit_message_text(
-                f"⚙️ **Настройки**\n\n"
-                f"Статус: {status_text}\n\n"
-                f"Продолжи настройку:",
+                f"⚙️ **Настройки**\n\nСтатус: {status_text}\n\nПродолжи настройку:",
                 parse_mode='Markdown',
                 reply_markup=get_status_buttons(user.__dict__, category)
             )
         return
     
-    # Обработка запроса информации
     elif callback_data.startswith('info_'):
         info_type = callback_data.replace('info_', '')
         
-        # Отправляем сообщение о загрузке
         await query.edit_message_text(
             "⏳ Получение информации...",
             reply_markup=get_main_menu()
         )
         
-        # Получаем данные
         data = None
+        message = None
+        
         if info_type == 'baro':
             data = await WarframeAPI.get_baro_trader()
             message = format_notification('baro', data)
@@ -256,23 +250,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif info_type == 'earth_cycle':
             data = await WarframeAPI.get_earth_cycle()
             message = format_notification('earth_cycle', data)
-        elif info_type == 'venus_weather':
-            data = await WarframeAPI.get_venus_weather()
-            message = format_notification('venus_weather', data)
-        elif info_type == 'deimos_cycle':
-            data = await WarframeAPI.get_deimos_cycle()
-            message = format_notification('deimos_cycle', data)
         elif info_type == 'duviri_mood':
             data = await WarframeAPI.get_duviri_mood()
             message = format_notification('duviri_mood', data)
         elif info_type == 'ergo_glast':
             data = await WarframeAPI.get_ergo_glast()
             message = format_notification('ergo_glast', data)
+        elif info_type == 'cavalero':
+            data = await WarframeAPI.get_cavalero()
+            message = format_notification('cavalero', data)
         elif info_type == 'eleonora':
             data = await WarframeAPI.get_eleonora()
             message = format_notification('eleonora', data)
+        elif info_type == 'nightwave':
+            data = await WarframeAPI.get_nightwave()
+            message = format_notification('nightwave', data)
         elif info_type == 'all':
-            # Получаем все данные
             tasks = [
                 WarframeAPI.get_baro_trader(),
                 WarframeAPI.get_fissures(),
@@ -283,11 +276,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 WarframeAPI.get_steel_path(),
                 WarframeAPI.get_alerts(),
                 WarframeAPI.get_earth_cycle(),
-                WarframeAPI.get_venus_weather(),
-                WarframeAPI.get_deimos_cycle(),
                 WarframeAPI.get_duviri_mood(),
-                WarframeAPI.get_ergo_glast(),
-                WarframeAPI.get_eleonora()
+                WarframeAPI.get_nightwave()
             ]
             
             results = await asyncio.gather(*tasks)
@@ -298,17 +288,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ('🧛 Торговец из Бездны', 'baro', results[0]),
                 ('💠 Разрывы Бездны', 'fissures', results[1]),
                 ('⚔️ Вторжения', 'invasions', results[2]),
-                ('🎯 Сортировка', 'sortie', results[3]),
+                ('🎯 Вылазка', 'sortie', results[3]),
                 ('⚡ Арбитраж', 'arbitration', results[4]),
                 ('🔥 Охота на Архонтов', 'archon', results[5]),
                 ('🗡️ Стальной Путь', 'steel_path', results[6]),
                 ('🚨 Тревоги', 'alerts', results[7]),
                 ('🌍 Цикл Земли', 'earth_cycle', results[8]),
-                ('🌡️ Погода Венеры', 'venus_weather', results[9]),
-                ('🕷️ Цикл Деймоса', 'deimos_cycle', results[10]),
-                ('🎭 Настроение Дувири', 'duviri_mood', results[11]),
-                ('🛒 Эрго Гласт', 'ergo_glast', results[12]),
-                ('🛒 Элеонора', 'eleonora', results[13])
+                ('🎭 Настроение Дувири', 'duviri_mood', results[9]),
+                ('🌙 Ночная Волна', 'nightwave', results[10])
             ]
             
             for name, data_type, result in data_map:
@@ -316,22 +303,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     message += f"=== {name} ===\n"
                     message += format_notification(data_type, result)
                     message += "\n\n"
+                else:
+                    message += f"=== {name} ===\n"
+                    message += "Нет данных\n\n"
         
-        await query.message.reply_text(
-            message,
-            parse_mode='Markdown',
-            reply_markup=get_info_menu()
-        )
+        if message:
+            await query.message.reply_text(
+                message,
+                parse_mode='Markdown',
+                reply_markup=get_info_menu()
+            )
+        else:
+            await query.message.reply_text(
+                "❌ Не удалось получить информацию",
+                reply_markup=get_info_menu()
+            )
         return
 
 async def send_notification(context: ContextTypes.DEFAULT_TYPE, telegram_id: int, message: str, notification_type: str):
-    """Отправка уведомления пользователю"""
     try:
         await context.bot.send_message(
             chat_id=telegram_id,
             text=message,
             parse_mode='Markdown'
         )
-        save_history(telegram_id, notification_type, message)
     except Exception as e:
         print(f"Error sending notification to {telegram_id}: {e}")
