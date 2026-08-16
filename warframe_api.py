@@ -168,21 +168,13 @@ class WarframeAPI:
     
     @staticmethod
     async def get_arbitration() -> Optional[Dict]:
-        """
-        Получение данных об Арбитраже из официального API Warframe
-        """
         data = await WarframeAPI.fetch_data("arbitration")
         if data:
-            # Проверяем, что данные не expired
             if data.get('expired', True):
                 return None
-            
-            # Проверяем, что узел не пустой и не SolNode000
             node = data.get('node', '')
             if not node or node == 'SolNode000':
                 return None
-            
-            # Извлекаем данные
             return {
                 'node': node,
                 'type': data.get('type', 'Неизвестно'),
@@ -196,76 +188,54 @@ class WarframeAPI:
     
     @staticmethod
     async def get_arbitration_from_browse() -> Optional[Dict]:
-        """
-        Парсит ближайшую миссию Арбитража из блока "Next Occurrence" на browse.wf
-        Используется как резервный источник, если официальное API недоступно
-        """
         url = "https://browse.wf/arbys"
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     if response.status != 200:
                         return None
-
                     html = await response.text()
-
-                    # Ищем блок "Next Occurrence"
                     next_occurrence_match = re.search(
                         r'Next Occurrence\s*</?strong>?\s*</?h2>?\s*<ul>(.*?)</ul>',
                         html,
                         re.DOTALL | re.IGNORECASE
                     )
-                    
                     if not next_occurrence_match:
-                        # Пробуем другой вариант поиска
                         next_occurrence_match = re.search(
                             r'Next Occurrence\s*</?strong>?\s*</?h2>?\s*(.*?)(?=<h2|###|$)',
                             html,
                             re.DOTALL | re.IGNORECASE
                         )
-                    
                     if not next_occurrence_match:
                         return None
-
                     block_content = next_occurrence_match.group(1)
                     lines = block_content.strip().split('\n')
-                    
                     clean_lines = []
                     for line in lines:
                         clean = re.sub(r'<[^>]+>', '', line).strip()
                         if clean and '|' in clean:
                             clean_lines.append(clean)
-                    
                     if not clean_lines:
                         return None
-                    
                     first_mission = clean_lines[0]
                     parts = first_mission.split(' | ', 1)
                     if len(parts) != 2:
                         return None
-                    
                     date_time_str, mission_details = parts[0], parts[1]
-                    
-                    # Парсим детали миссии
                     mission_parts = mission_details.split(' @ ')
                     if len(mission_parts) != 2:
                         return None
-                    
                     left_part = mission_parts[0].strip()
                     right_part = mission_parts[1].strip()
-                    
                     node_planet_bonus = right_part.split(' (', 1)
                     node_planet = node_planet_bonus[0].strip()
                     bonus = f"({node_planet_bonus[1]}" if len(node_planet_bonus) > 1 else ''
-                    
                     if ', ' in node_planet:
                         node, planet = node_planet.split(', ', 1)
                     else:
                         node = node_planet
                         planet = ''
-                    
                     bonus = bonus.replace(')', '').strip() if bonus else ''
-                    
                     return {
                         'datetime': date_time_str,
                         'type': left_part,
@@ -274,7 +244,6 @@ class WarframeAPI:
                         'bonus': bonus,
                         'source': 'browse.wf'
                     }
-                    
         except Exception as e:
             print(f"Error parsing browse.wf: {e}")
             return None
@@ -290,10 +259,8 @@ class WarframeAPI:
                     'type': mission.get('type', 'Неизвестно'),
                     'archwing': mission.get('archwingRequired', False)
                 })
-            
             if not missions:
                 return None
-            
             return {
                 'boss': data.get('boss', 'Неизвестно'),
                 'faction': data.get('faction', 'Неизвестно'),
@@ -309,7 +276,6 @@ class WarframeAPI:
         if data:
             if not data.get('active', False):
                 return None
-            
             return {
                 'active': data.get('active', False),
                 'current_reward': data.get('currentReward', {}),
@@ -331,12 +297,10 @@ class WarframeAPI:
                         if expiry_time > datetime.utcnow():
                             mission = alert.get('mission', {})
                             reward = mission.get('reward', {})
-                            
                             counted_items = []
                             if 'countedItems' in reward:
                                 for item in reward['countedItems']:
                                     counted_items.append(f"{item.get('count', '')}x {item.get('type', '')}")
-                            
                             alerts.append({
                                 'id': alert.get('id', ''),
                                 'node': mission.get('node', 'Неизвестно'),
@@ -400,7 +364,6 @@ class WarframeAPI:
             offers = []
             for offer in data.get('offers', []):
                 cost = offer.get('cost', {})
-                
                 offers.append({
                     'name': offer.get('name', 'Неизвестно'),
                     'type': offer.get('type', ''),
@@ -408,7 +371,6 @@ class WarframeAPI:
                         'nightwave_credits': cost.get('nightwaveCredits', 0),
                     }
                 })
-            
             return {
                 'season': data.get('season', ''),
                 'phase': data.get('phase', 0),
@@ -428,3 +390,273 @@ class WarframeAPI:
     @staticmethod
     async def get_eleonora() -> Optional[Dict]:
         return None
+
+
+# ==============================================
+# ФУНКЦИЯ ФОРМАТИРОВАНИЯ УВЕДОМЛЕНИЙ
+# ==============================================
+
+def format_notification(data_type: str, data) -> str:
+    """Форматирование уведомлений для отправки в Telegram"""
+    
+    if data_type == 'baro':
+        if not data or not data.get('active'):
+            return "🧛 Торговец из Бездны сейчас неактивен"
+        
+        character_name = data.get('character', "Baro Ki'Teer")
+        message = f"🧛 **{character_name}**\n"
+        message += f"📍 **Местоположение:** {data.get('location', 'Неизвестно')}\n"
+        message += f"⏰ **Доступен до:** {data.get('expiry', 'Неизвестно')}\n\n"
+        message += "**🛍️ Инвентарь:**\n"
+        
+        for item in data.get('inventory', [])[:10]:
+            item_name = item.get('item', 'Неизвестно')
+            ducats = item.get('ducats', 0)
+            credits = item.get('credits', 0)
+            message += f"• {item_name} - {ducats}🪙 {credits}💰\n"
+        
+        return message
+    
+    elif data_type == 'fissures':
+        if not data:
+            return "💠 Активных разрывов Бездны нет"
+        
+        message = "💠 **Активные разрывы Бездны**\n\n"
+        tier_order = {'Лито': 1, 'Мезо': 2, 'Нео': 3, 'Акси': 4}
+        
+        sorted_fissures = sorted(data, key=lambda x: tier_order.get(x['tier'], 99))
+        
+        for fissure in sorted_fissures[:15]:
+            storm = "⚡ " if fissure.get('is_storm') else ""
+            message += f"{storm}**{fissure['tier']}** - {fissure['node']}\n"
+            message += f"  {fissure['mission_type']} vs {fissure['enemy']}\n"
+            message += "\n"
+        
+        return message
+    
+    elif data_type == 'invasions':
+        if not data:
+            return "⚔️ Активных вторжений нет"
+        
+        message = "⚔️ **Активные вторжения**\n\n"
+        
+        active_invasions = [inv for inv in data if inv.get('completion', 0) >= 0 and inv.get('completion', 0) < 100]
+        
+        if not active_invasions:
+            return "⚔️ Все вторжения завершены! Новые появятся позже."
+        
+        for invasion in active_invasions[:10]:
+            node = invasion.get('node', 'Неизвестно')
+            
+            attacker_name = invasion.get('attacker', {}).get('name', 'Неизвестно')
+            defender_name = invasion.get('defender', {}).get('name', 'Неизвестно')
+            
+            completion = invasion.get('completion', 0)
+            if completion < 0:
+                completion = 0
+                
+            message += f"📍 **{node}**\n"
+            message += f"⚔️ {attacker_name} vs {defender_name}\n"
+            message += f"📊 Прогресс: {completion:.1f}%\n"
+            
+            reward_desc = invasion.get('reward_description', '')
+            if reward_desc and reward_desc != 'Нет данных':
+                message += f"🎁 {reward_desc}\n"
+            
+            if invasion.get('has_reactor'):
+                message += "⚡ **РЕАКТОР ОРОКИН ДОСТУПЕН!**\n"
+            if invasion.get('has_catalyst'):
+                message += "🔧 **КАТАЛИЗАТОР ОРОКИН ДОСТУПЕН!**\n"
+            
+            message += "\n"
+        
+        return message
+    
+    elif data_type == 'sortie':
+        if not data:
+            return "🎯 Вылазка сейчас недоступна"
+        
+        message = "🎯 **Вылазка**\n\n"
+        message += f"👾 **Босс:** {data.get('boss', 'Неизвестно')}\n"
+        message += f"⚔️ **Фракция:** {data.get('faction', 'Неизвестно')}\n"
+        message += f"⏰ **Доступна до:** {data.get('expiry', 'Неизвестно')}\n\n"
+        message += "**📋 Задания:**\n"
+        
+        for variant in data.get('variants', []):
+            message += f"• 📍 **{variant.get('node', 'Неизвестно')}**\n"
+            message += f"  🎯 {variant.get('mission_type', 'Неизвестно')}"
+            if variant.get('modifier'):
+                message += f" ({variant.get('modifier', '')})"
+            message += "\n"
+        
+        return message
+    
+    elif data_type == 'arbitration':
+        if not data:
+            return "⚡ Арбитраж сейчас недоступен"
+        
+        message = "⚡ **Арбитраж**\n\n"
+        
+        if data.get('source') == 'browse.wf':
+            message += f"🕐 **Время:** {data.get('datetime', 'Неизвестно')}\n"
+            message += f"🎯 **Тип:** {data.get('type', 'Неизвестно')}\n"
+            message += f"📍 **Узел:** {data.get('node', 'Неизвестно')}"
+            if data.get('planet'):
+                message += f" ({data.get('planet')})"
+            message += "\n"
+            if data.get('bonus'):
+                message += f"💰 **Бонус:** {data.get('bonus')}\n"
+        else:
+            message += f"📍 **Узел:** {data.get('node', 'Неизвестно')}\n"
+            message += f"🎯 **Тип миссии:** {data.get('type', 'Неизвестно')}\n"
+            message += f"👾 **Враг:** {data.get('enemy', 'Неизвестно')}\n"
+            message += f"⏰ **Доступен до:** {data.get('expiry', 'Неизвестно')}\n"
+            
+            if data.get('archwing'):
+                message += "🛸 **Арчвинг активен**\n"
+            if data.get('sharkwing'):
+                message += "🦈 **Шарквинг активен**\n"
+        
+        return message
+    
+    elif data_type == 'archon':
+        if not data:
+            return "🔥 Охота на Архонтов сейчас недоступна"
+        
+        message = "🔥 **Охота на Архонтов**\n\n"
+        message += f"👾 **Босс:** {data.get('boss', 'Неизвестно')}\n"
+        message += f"⚔️ **Фракция:** {data.get('faction', 'Неизвестно')}\n"
+        message += f"⏰ **Доступна до:** {data.get('expiry', 'Неизвестно')}\n\n"
+        
+        missions = data.get('missions', [])
+        if missions:
+            message += "**📋 Миссии:**\n\n"
+            for i, mission in enumerate(missions, 1):
+                node = mission.get('node', 'Неизвестно')
+                mission_type = mission.get('type', 'Неизвестно')
+                
+                message += f"{i}. 📍 **{node}**\n"
+                message += f"   🎯 {mission_type}\n"
+                
+                if mission.get('archwing'):
+                    message += "   🛸 Арчвинг активен\n"
+                message += "\n"
+        
+        return message
+    
+    elif data_type == 'steel_path':
+        if not data:
+            return "🗡️ Стальной Путь сейчас неактивен"
+        
+        message = "🗡️ **Стальной Путь**\n\n"
+        reward = data.get('current_reward', {})
+        if reward:
+            message += f"🎁 **Текущая награда:** {reward.get('name', 'Неизвестно')}\n"
+            message += f"⏰ **Доступно:** {data.get('remaining', 'Неизвестно')}\n"
+        else:
+            message += "Текущая награда не определена\n"
+        
+        return message
+    
+    elif data_type == 'alerts':
+        if not data:
+            return "🚨 Активных тревог нет"
+        
+        message = "🚨 **Активные тревоги**\n\n"
+        
+        for alert in data[:10]:
+            message += f"📍 **{alert.get('node', 'Неизвестно')}**\n"
+            message += f"🎯 {alert.get('type', 'Неизвестно')}"
+            if alert.get('faction'):
+                message += f" - {alert.get('faction', '')}"
+            message += "\n"
+            
+            reward_items = alert.get('reward_items', '')
+            credits = alert.get('credits', 0)
+            if reward_items and reward_items != 'Нет данных':
+                message += f"🎁 Награда: {reward_items}"
+                if credits > 0:
+                    message += f" (+{credits}💰)"
+                message += "\n"
+            
+            message += "\n"
+        
+        return message
+    
+    elif data_type == 'earth_cycle':
+        if not data:
+            return "🌍 Данные о цикле Земли недоступны"
+        
+        is_day = data.get('is_day', False)
+        time_left = data.get('time_left', 'Неизвестно')
+        
+        icon = "☀️" if is_day else "🌙"
+        state_name = "День" if is_day else "Ночь"
+        
+        return f"{icon} **Цикл Земли**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
+    
+    elif data_type == 'venus_weather':
+        if not data:
+            return "🌡️ Данные о погоде на Венере недоступны"
+        
+        is_warm = data.get('is_warm', False)
+        time_left = data.get('time_left', 'Неизвестно')
+        
+        icon = "☀️" if is_warm else "❄️"
+        state_name = "Тепло" if is_warm else "Холодно"
+        
+        return f"{icon} **Погода на Венере**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
+    
+    elif data_type == 'deimos_cycle':
+        if not data:
+            return "🕷️ Данные о цикле Деймоса недоступны"
+        
+        state = data.get('state', '')
+        time_left = data.get('time_left', 'Неизвестно')
+        
+        icon = "🟢" if "vome" in state.lower() else "🔴"
+        state_name = "Воме" if "vome" in state.lower() else "Фасс"
+        
+        return f"{icon} **Цикл Деймоса**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
+    
+    elif data_type == 'duviri_mood':
+        if not data:
+            return "🎭 Данные о настроении в Дувири недоступны"
+        
+        mood = data.get('mood', '')
+        time_left = data.get('time_left', 'Неизвестно')
+        
+        mood_emojis = {
+            'joy': '😊',
+            'envy': '💚',
+            'fear': '😱',
+            'anger': '😡',
+            'sorrow': '😢'
+        }
+        
+        mood_emoji = mood_emojis.get(mood.lower(), '🎭')
+        
+        return f"{mood_emoji} **Настроение Дувири**\n\nСостояние: {mood}\n⏰ До смены: {time_left}"
+    
+    elif data_type == 'nightwave':
+        if not data:
+            return "🌙 Ночная Волна сейчас недоступна"
+        
+        message = "🌙 **Ночная Волна**\n\n"
+        message += f"📅 **Сезон:** {data.get('season', 'Неизвестно')}\n"
+        message += f"📊 **Фаза:** {data.get('phase', 0)}\n"
+        message += f"⏰ **Доступно до:** {data.get('expiry', 'Неизвестно')}\n\n"
+        
+        offers = data.get('offers', [])
+        if offers:
+            message += "**🛍️ Текущие предложения:**\n\n"
+            for offer in offers[:5]:
+                message += f"• **{offer.get('name', 'Неизвестно')}**\n"
+                cost = offer.get('cost', {})
+                if cost.get('nightwave_credits'):
+                    message += f"  🌙 {cost['nightwave_credits']} кредитов Ночной Волны\n"
+                message += "\n"
+        
+        return message
+    
+    return "Неизвестное уведомление"
