@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Any
 import re
 
 WARFRAME_API_URL = "https://api.warframestat.us/pc"
-WARFRAME_API_URL_PC = "https://api.warframestat.us/pc"
 
 class WarframeAPI:
     @staticmethod
@@ -30,7 +29,7 @@ class WarframeAPI:
                 'inventory': data.get('inventory', []),
                 'end': data.get('end', ''),
                 'start': data.get('start', ''),
-                'character': data.get('character', 'Baro Ki\'Teer')
+                'character': data.get('character', "Baro Ki'Teer")
             }
         return None
     
@@ -221,7 +220,9 @@ def format_notification(data_type: str, data) -> str:
         if not data or not data.get('active'):
             return "🚫 Торговец из Бездны сейчас неактивен"
         
-        message = f"🧛 **{data.get('character', 'Baro Ki\'Teer')}**\n"
+        # Исправлено: используем двойные кавычки для строки с апострофом
+        character_name = data.get('character', "Baro Ki'Teer")
+        message = f"🧛 **{character_name}**\n"
         message += f"📍 **Местоположение:** {data['location']}\n"
         message += f"⏰ **Доступен до:** {data['end']}\n\n"
         message += "**🛍️ Инвентарь:**\n"
