@@ -1,12 +1,22 @@
+from __future__ import annotations
+
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 import json
+import os
 
 from config import DATABASE_URL
 
-engine = create_engine(DATABASE_URL)
+# Настройка engine
+engine = create_engine(
+    DATABASE_URL,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=3600
+)
+
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
 
@@ -72,77 +82,97 @@ class NotificationHistory(Base):
     content = Column(Text)
     sent_at = Column(DateTime, default=datetime.utcnow)
 
-Base.metadata.create_all(engine)
+def init_db():
+    """Инициализация базы данных - создание всех таблиц"""
+    try:
+        Base.metadata.create_all(engine)
+        print("✅ Database initialized successfully")
+    except Exception as e:
+        print(f"❌ Database initialization error: {e}")
+        raise
 
 def get_user(telegram_id):
     session = Session()
-    user = session.query(User).filter_by(telegram_id=telegram_id).first()
-    if not user:
-        user = User(telegram_id=telegram_id)
-        session.add(user)
-        session.commit()
-    session.close()
-    return user
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user:
+            user = User(telegram_id=telegram_id)
+            session.add(user)
+            session.commit()
+        return user
+    finally:
+        session.close()
 
 def update_user_settings(telegram_id, **kwargs):
     session = Session()
-    user = session.query(User).filter_by(telegram_id=telegram_id).first()
-    if not user:
-        user = User(telegram_id=telegram_id)
-        session.add(user)
-    
-    for key, value in kwargs.items():
-        if hasattr(user, key):
-            setattr(user, key, value)
-    
-    session.commit()
-    session.close()
-    return user
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if not user:
+            user = User(telegram_id=telegram_id)
+            session.add(user)
+        
+        for key, value in kwargs.items():
+            if hasattr(user, key):
+                setattr(user, key, value)
+        
+        session.commit()
+        return user
+    finally:
+        session.close()
 
 def add_to_queue(telegram_id, notification_type, content):
     session = Session()
-    queue_item = NotificationQueue(
-        user_id=telegram_id,
-        notification_type=notification_type,
-        content=content
-    )
-    session.add(queue_item)
-    session.commit()
-    session.close()
+    try:
+        queue_item = NotificationQueue(
+            user_id=telegram_id,
+            notification_type=notification_type,
+            content=content
+        )
+        session.add(queue_item)
+        session.commit()
+    finally:
+        session.close()
 
 def get_pending_notifications():
     session = Session()
-    notifications = session.query(NotificationQueue).filter_by(is_sent=False).order_by(NotificationQueue.created_at).all()
-    session.close()
-    return notifications
+    try:
+        return session.query(NotificationQueue).filter_by(is_sent=False).order_by(NotificationQueue.created_at).all()
+    finally:
+        session.close()
 
 def mark_as_sent(notification_id):
     session = Session()
-    notification = session.query(NotificationQueue).filter_by(id=notification_id).first()
-    if notification:
-        notification.is_sent = True
-        notification.sent_at = datetime.utcnow()
-        session.commit()
-    session.close()
+    try:
+        notification = session.query(NotificationQueue).filter_by(id=notification_id).first()
+        if notification:
+            notification.is_sent = True
+            notification.sent_at = datetime.utcnow()
+            session.commit()
+    finally:
+        session.close()
 
 def save_history(telegram_id, notification_type, content):
     session = Session()
-    history = NotificationHistory(
-        user_id=telegram_id,
-        notification_type=notification_type,
-        content=content
-    )
-    session.add(history)
-    session.commit()
-    session.close()
+    try:
+        history = NotificationHistory(
+            user_id=telegram_id,
+            notification_type=notification_type,
+            content=content
+        )
+        session.add(history)
+        session.commit()
+    finally:
+        session.close()
 
 def generate_widget_token(telegram_id):
     import secrets
     token = secrets.token_urlsafe(32)
     session = Session()
-    user = session.query(User).filter_by(telegram_id=telegram_id).first()
-    if user:
-        user.widget_token = token
-        session.commit()
-    session.close()
-    return token
+    try:
+        user = session.query(User).filter_by(telegram_id=telegram_id).first()
+        if user:
+            user.widget_token = token
+            session.commit()
+        return token
+    finally:
+        session.close()
