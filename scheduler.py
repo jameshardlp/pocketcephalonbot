@@ -5,7 +5,7 @@ import asyncio
 import logging
 
 from config import CHECK_INTERVAL
-from database import add_to_queue, save_history, get_user
+from database import add_to_queue, save_history
 from warframe_api import WarframeAPI, format_notification
 
 logger = logging.getLogger(__name__)
@@ -40,34 +40,19 @@ class NotificationScheduler:
                 self.check_steel_path(),
                 self.check_alerts(),
                 self.check_cycles(),
-                self.check_traders()
+                self.check_nightwave()
             ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for result in results:
-                if isinstance(result, Exception):
-                    logger.error(f"Error in check: {result}")
+            await asyncio.gather(*tasks, return_exceptions=True)
         except Exception as e:
             logger.error(f"Error in check_all: {e}")
     
-    async def check_invasions(self):
-        data = await WarframeAPI.get_invasions()
-        if data:
-            # Создаем хэш на основе ID и прогресса всех вторжений
-            invasions_hash = hash(str([(inv['id'], inv['completion']) for inv in data]))
-            key = 'invasions_hash'
-            
-            if key not in self.last_data or self.last_data[key] != invasions_hash:
-                self.last_data[key] = invasions_hash
-                message = format_notification('invasions', data)
-                await self.notify_all('notify_invasions', message, 'invasions')
-    
     async def check_baro(self):
         data = await WarframeAPI.get_baro_trader()
-        if data and data.get('active'):
-            key = 'baro_inventory'
-            inventory_hash = hash(str(data.get('inventory', [])))
-            if key not in self.last_data or self.last_data[key] != inventory_hash:
-                self.last_data[key] = inventory_hash
+        if data and data.get('active') and data.get('inventory'):
+            key = 'baro_hash'
+            baro_hash = hash(str(data.get('inventory', [])))
+            if key not in self.last_data or self.last_data[key] != baro_hash:
+                self.last_data[key] = baro_hash
                 message = format_notification('baro', data)
                 await self.notify_all('notify_baro', message, 'baro')
     
@@ -80,6 +65,16 @@ class NotificationScheduler:
                 self.last_data[key] = fissures_hash
                 message = format_notification('fissures', data)
                 await self.notify_all('notify_fissures', message, 'fissures')
+    
+    async def check_invasions(self):
+        data = await WarframeAPI.get_invasions()
+        if data:
+            key = 'invasions_hash'
+            invasions_hash = hash(str([(inv['id'], inv['completion']) for inv in data if inv.get('completion', 0) < 100]))
+            if key not in self.last_data or self.last_data[key] != invasions_hash:
+                self.last_data[key] = invasions_hash
+                message = format_notification('invasions', data)
+                await self.notify_all('notify_invasions', message, 'invasions')
     
     async def check_sortie(self):
         data = await WarframeAPI.get_sortie()
@@ -150,24 +145,15 @@ class NotificationScheduler:
                 message = format_notification('duviri_mood', duviri)
                 await self.notify_all('notify_duviri_mood', message, 'duviri_mood')
     
-    async def check_traders(self):
-        ergo = await WarframeAPI.get_ergo_glast()
-        if ergo and ergo.get('inventory'):
-            key = 'ergo_hash'
-            ergo_hash = hash(str(ergo.get('inventory', [])))
-            if key not in self.last_data or self.last_data[key] != ergo_hash:
-                self.last_data[key] = ergo_hash
-                message = format_notification('ergo_glast', ergo)
-                await self.notify_all('notify_ergo_glast', message, 'ergo_glast')
-        
-        eleonora = await WarframeAPI.get_eleonora()
-        if eleonora and eleonora.get('inventory'):
-            key = 'eleonora_hash'
-            eleonora_hash = hash(str(eleonora.get('inventory', [])))
-            if key not in self.last_data or self.last_data[key] != eleonora_hash:
-                self.last_data[key] = eleonora_hash
-                message = format_notification('eleonora', eleonora)
-                await self.notify_all('notify_eleonora', message, 'eleonora')
+    async def check_nightwave(self):
+        data = await WarframeAPI.get_nightwave()
+        if data:
+            key = 'nightwave_hash'
+            nightwave_hash = hash(str(data.get('offers', [])))
+            if key not in self.last_data or self.last_data[key] != nightwave_hash:
+                self.last_data[key] = nightwave_hash
+                message = format_notification('nightwave', data)
+                await self.notify_all('notify_nightwave', message, 'nightwave')
     
     async def notify_all(self, setting_name, message, notification_type):
         from database import Session, User
