@@ -1,10 +1,5 @@
 🎯 Pocket Cephalon - Warframe Notification Bot
 <div align="center">
-https://img.shields.io/badge/Pocket_Cephalon-Warframe_Bot-blue?style=for-the-badge&logo=telegram
-https://img.shields.io/badge/version-2.0.0-green?style=flat-square
-https://img.shields.io/badge/Python-3.10+-yellow?style=flat-square&logo=python
-https://img.shields.io/badge/Telegram-Bot-blue?style=flat-square&logo=telegram
-https://img.shields.io/badge/Railway-Deployed-success?style=flat-square&logo=railway
 
 </div>
 Pocket Cephalon - это мощный Telegram бот для отслеживания событий в игре Warframe. Получайте мгновенные уведомления о всех важных событиях, настраивайте уведомления под себя и используйте удобный виджет для смартфона!
