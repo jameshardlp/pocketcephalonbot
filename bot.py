@@ -1,12 +1,10 @@
 import asyncio
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 import logging
-import threading
 
 from config import BOT_TOKEN
 from handlers import start, help_command, settings, info_command, button_callback, widget_command
 from scheduler import NotificationScheduler
-from web.server import run_web_server
 
 # Настройка логирования
 logging.basicConfig(
@@ -37,11 +35,6 @@ class WarframeBot:
             self.scheduler = NotificationScheduler(self.application.bot)
             self.scheduler.setup()
             
-            # Запускаем веб-сервер в отдельном потоке
-            web_thread = threading.Thread(target=run_web_server, daemon=True)
-            web_thread.start()
-            logger.info("Web server started")
-            
             # Запускаем бота
             logger.info("Starting bot...")
             await self.application.initialize()
@@ -67,10 +60,10 @@ class WarframeBot:
         await self.application.shutdown()
         logger.info("Bot shut down")
 
-def main():
-    """Главная функция"""
+def run_bot():
+    """Запуск бота"""
     bot = WarframeBot()
     asyncio.run(bot.start_bot())
 
 if __name__ == "__main__":
-    main()
+    run_bot()
