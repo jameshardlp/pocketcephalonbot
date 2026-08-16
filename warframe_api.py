@@ -168,26 +168,39 @@ class WarframeAPI:
     
     @staticmethod
     async def get_arbitration() -> Optional[Dict]:
+        """
+        Получение данных об Арбитраже.
+        Сначала пытается получить из официального API.
+        Если API не даёт данных, использует парсинг browse.wf.
+        """
+        # 1. Сначала пробуем официальное API
         data = await WarframeAPI.fetch_data("arbitration")
         if data:
-            if data.get('expired', True):
-                return None
-            node = data.get('node', '')
-            if not node or node == 'SolNode000':
-                return None
-            return {
-                'node': node,
-                'type': data.get('type', 'Неизвестно'),
-                'enemy': data.get('enemy', 'Неизвестно'),
-                'expiry': data.get('expiry', 'Неизвестно'),
-                'archwing': data.get('archwing', False),
-                'sharkwing': data.get('sharkwing', False),
-                'source': 'api'
-            }
+            if not data.get('expired', True):
+                node = data.get('node', '')
+                if node and node != 'SolNode000':
+                    return {
+                        'node': node,
+                        'type': data.get('type', 'Неизвестно'),
+                        'enemy': data.get('enemy', 'Неизвестно'),
+                        'expiry': data.get('expiry', 'Неизвестно'),
+                        'archwing': data.get('archwing', False),
+                        'sharkwing': data.get('sharkwing', False),
+                        'source': 'api'
+                    }
+        
+        # 2. Если API не дал данных, пробуем browse.wf
+        browse_data = await WarframeAPI.get_arbitration_from_browse()
+        if browse_data:
+            return browse_data
+        
         return None
-    
+
     @staticmethod
     async def get_arbitration_from_browse() -> Optional[Dict]:
+        """
+        Парсит ближайшую миссию Арбитража из блока "Next Occurrence" на browse.wf
+        """
         url = "https://browse.wf/arbys"
         try:
             async with aiohttp.ClientSession() as session:
@@ -195,6 +208,7 @@ class WarframeAPI:
                     if response.status != 200:
                         return None
                     html = await response.text()
+                    
                     next_occurrence_match = re.search(
                         r'Next Occurrence\s*</?strong>?\s*</?h2>?\s*<ul>(.*?)</ul>',
                         html,
@@ -208,6 +222,7 @@ class WarframeAPI:
                         )
                     if not next_occurrence_match:
                         return None
+                    
                     block_content = next_occurrence_match.group(1)
                     lines = block_content.strip().split('\n')
                     clean_lines = []
@@ -215,27 +230,36 @@ class WarframeAPI:
                         clean = re.sub(r'<[^>]+>', '', line).strip()
                         if clean and '|' in clean:
                             clean_lines.append(clean)
+                    
                     if not clean_lines:
                         return None
+                    
                     first_mission = clean_lines[0]
                     parts = first_mission.split(' | ', 1)
                     if len(parts) != 2:
                         return None
+                    
                     date_time_str, mission_details = parts[0], parts[1]
+                    
                     mission_parts = mission_details.split(' @ ')
                     if len(mission_parts) != 2:
                         return None
+                    
                     left_part = mission_parts[0].strip()
                     right_part = mission_parts[1].strip()
+                    
                     node_planet_bonus = right_part.split(' (', 1)
                     node_planet = node_planet_bonus[0].strip()
                     bonus = f"({node_planet_bonus[1]}" if len(node_planet_bonus) > 1 else ''
+                    
                     if ', ' in node_planet:
                         node, planet = node_planet.split(', ', 1)
                     else:
                         node = node_planet
                         planet = ''
+                    
                     bonus = bonus.replace(')', '').strip() if bonus else ''
+                    
                     return {
                         'datetime': date_time_str,
                         'type': left_part,
