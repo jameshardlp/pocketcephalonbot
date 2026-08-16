@@ -1,5 +1,6 @@
 import aiohttp
 import asyncio
+import json
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 import re
@@ -27,8 +28,8 @@ class WarframeAPI:
                 'active': data.get('active', False),
                 'location': data.get('location', 'Неизвестно'),
                 'inventory': data.get('inventory', []),
-                'end': data.get('end', ''),
-                'start': data.get('start', ''),
+                'end': data.get('expiry', ''),  # Исправлено: expiry вместо end
+                'start': data.get('activation', ''),
                 'character': data.get('character', "Baro Ki'Teer")
             }
         return None
@@ -53,20 +54,101 @@ class WarframeAPI:
     
     @staticmethod
     async def get_invasions() -> Optional[List[Dict]]:
+        """Получение информации о вторжениях с правильной структурой"""
         data = await WarframeAPI.fetch_data("invasions")
         if data:
-            return [{
-                'id': invasion.get('id', ''),
-                'node': invasion.get('node', ''),
-                'faction': invasion.get('faction', ''),
-                'attacker': invasion.get('attacker', {}),
-                'defender': invasion.get('defender', {}),
-                'completion': invasion.get('completion', 0),
-                'reward': invasion.get('reward', {}),
-                'eta': invasion.get('eta', ''),
-                'vs': invasion.get('vs', ''),
-                'description': invasion.get('desc', '')
-            } for invasion in data]
+            invasions = []
+            for invasion in data:
+                try:
+                    # Пропускаем завершенные вторжения
+                    if invasion.get('completed', False):
+                        continue
+                    
+                    attacker = invasion.get('attacker', {})
+                    defender = invasion.get('defender', {})
+                    
+                    # Получаем названия фракций из правильных полей
+                    attacker_name = attacker.get('faction', 'Неизвестно')
+                    defender_name = defender.get('faction', 'Неизвестно')
+                    
+                    # Получаем награды
+                    attacker_reward = attacker.get('reward', {})
+                    defender_reward = defender.get('reward', {})
+                    
+                    # Извлекаем предметы из наград
+                    attacker_items = []
+                    if 'countedItems' in attacker_reward:
+                        for item in attacker_reward['countedItems']:
+                            attacker_items.append(item.get('type', ''))
+                    if 'items' in attacker_reward:
+                        for item in attacker_reward['items']:
+                            attacker_items.append(item.get('type', ''))
+                    
+                    defender_items = []
+                    if 'countedItems' in defender_reward:
+                        for item in defender_reward['countedItems']:
+                            defender_items.append(item.get('type', ''))
+                    if 'items' in defender_reward:
+                        for item in defender_reward['items']:
+                            defender_items.append(item.get('type', ''))
+                    
+                    # Определяем, есть ли особые награды
+                    has_reactor = False
+                    has_catalyst = False
+                    
+                    all_items = attacker_items + defender_items
+                    for item in all_items:
+                        if 'reactor' in item.lower() or 'реактор' in item.lower():
+                            has_reactor = True
+                        if 'catalyst' in item.lower() or 'катализатор' in item.lower():
+                            has_catalyst = True
+                    
+                    # Формируем описание награды
+                    reward_desc = []
+                    if attacker_items:
+                        reward_desc.append(f"🔵 {attacker_name}: {', '.join(attacker_items[:3])}")
+                    if defender_items:
+                        reward_desc.append(f"🔴 {defender_name}: {', '.join(defender_items[:3])}")
+                    
+                    # Добавляем особые отметки
+                    if has_reactor:
+                        reward_desc.append("⚡ **РЕАКТОР ОРОКИН!**")
+                    if has_catalyst:
+                        reward_desc.append("🔧 **КАТАЛИЗАТОР ОРОКИН!**")
+                    
+                    invasions.append({
+                        'id': invasion.get('id', ''),
+                        'node': invasion.get('node', 'Неизвестно'),
+                        'planet': invasion.get('nodeKey', '').split('/')[0] if '/' in invasion.get('nodeKey', '') else '',
+                        'faction': invasion.get('faction', 'Неизвестно'),
+                        'attacker': {
+                            'name': attacker_name,
+                            'faction': attacker.get('factionKey', ''),
+                            'reward': attacker_reward
+                        },
+                        'defender': {
+                            'name': defender_name,
+                            'faction': defender.get('factionKey', ''),
+                            'reward': defender_reward
+                        },
+                        'completion': invasion.get('completion', 0),
+                        'reward_description': '\n'.join(reward_desc) if reward_desc else 'Нет данных',
+                        'has_reactor': has_reactor,
+                        'has_catalyst': has_catalyst,
+                        'eta': invasion.get('eta', ''),
+                        'vs': invasion.get('vs', ''),
+                        'description': invasion.get('desc', ''),
+                        'expiry': invasion.get('expiry', ''),
+                        'start': invasion.get('activation', ''),
+                        'completed': invasion.get('completed', False),
+                        'required_runs': invasion.get('requiredRuns', 0),
+                        'count': invasion.get('count', 0)
+                    })
+                except Exception as e:
+                    print(f"⚠️ Error parsing invasion: {e}")
+                    continue
+            
+            return invasions
         return []
     
     @staticmethod
@@ -92,7 +174,7 @@ class WarframeAPI:
                 'enemy': data.get('enemy', ''),
                 'expiry': data.get('expiry', ''),
                 'node_key': data.get('nodeKey', ''),
-                'tier': data.get('tier', ''),
+                'tier': data.get('tier', 'Обычный'),
                 'mission_type': data.get('missionType', ''),
                 'archwing': data.get('archwing', False),
                 'dark_sector': data.get('darkSector', False)
@@ -106,7 +188,7 @@ class WarframeAPI:
             return {
                 'boss': data.get('boss', ''),
                 'faction': data.get('faction', ''),
-                'missions': data.get('missions', []),
+                'missions': data.get('variants', []),  # Исправлено: variants вместо missions
                 'expiry': data.get('expiry', ''),
                 'reward_pool': data.get('rewardPool', [])
             }
@@ -151,24 +233,12 @@ class WarframeAPI:
     
     @staticmethod
     async def get_venus_weather() -> Optional[Dict]:
-        data = await WarframeAPI.fetch_data("venusWeather")
-        if data:
-            return {
-                'state': data.get('state', ''),
-                'time_left': data.get('timeLeft', ''),
-                'is_warm': data.get('isWarm', False)
-            }
+        # Венера временно недоступна
         return None
     
     @staticmethod
     async def get_deimos_cycle() -> Optional[Dict]:
-        data = await WarframeAPI.fetch_data("deimosCycle")
-        if data:
-            return {
-                'state': data.get('state', ''),
-                'time_left': data.get('timeLeft', ''),
-                'is_vome': data.get('isVome', False)
-            }
+        # Деймос временно недоступен
         return None
     
     @staticmethod
@@ -176,7 +246,7 @@ class WarframeAPI:
         data = await WarframeAPI.fetch_data("duviriCycle")
         if data:
             return {
-                'mood': data.get('mood', ''),
+                'mood': data.get('state', ''),
                 'time_left': data.get('timeLeft', ''),
                 'mood_icon': data.get('moodIcon', '')
             }
@@ -184,22 +254,12 @@ class WarframeAPI:
     
     @staticmethod
     async def get_ergo_glast() -> Optional[Dict]:
-        data = await WarframeAPI.fetch_data("ergoGlast")
-        if data:
-            return {
-                'inventory': data.get('inventory', []),
-                'expiry': data.get('expiry', '')
-            }
+        # Эрго Гласт временно недоступен
         return None
     
     @staticmethod
     async def get_eleonora() -> Optional[Dict]:
-        data = await WarframeAPI.fetch_data("eleonora")
-        if data:
-            return {
-                'inventory': data.get('inventory', []),
-                'expiry': data.get('expiry', '')
-            }
+        # Элеонора временно недоступна
         return None
 
 def parse_weapon_stats(item_data: Dict) -> str:
@@ -220,11 +280,10 @@ def format_notification(data_type: str, data) -> str:
         if not data or not data.get('active'):
             return "🚫 Торговец из Бездны сейчас неактивен"
         
-        # Исправлено: используем двойные кавычки для строки с апострофом
         character_name = data.get('character', "Baro Ki'Teer")
         message = f"🧛 **{character_name}**\n"
-        message += f"📍 **Местоположение:** {data['location']}\n"
-        message += f"⏰ **Доступен до:** {data['end']}\n\n"
+        message += f"📍 **Местоположение:** {data.get('location', 'Неизвестно')}\n"
+        message += f"⏰ **Доступен до:** {data.get('end', 'Неизвестно')}\n\n"
         message += "**🛍️ Инвентарь:**\n"
         
         for item in data.get('inventory', [])[:10]:
@@ -261,27 +320,47 @@ def format_notification(data_type: str, data) -> str:
         
         message = "⚔️ **Активные вторжения**\n\n"
         
-        for invasion in data[:10]:
-            attacker = invasion.get('attacker', {})
-            defender = invasion.get('defender', {})
-            reward = invasion.get('reward', {})
+        # Фильтруем вторжения с нормальным прогрессом
+        active_invasions = [inv for inv in data if inv.get('completion', 0) >= 0]
+        
+        if not active_invasions:
+            return "🚫 Нет активных вторжений"
+        
+        for invasion in active_invasions[:10]:
+            node = invasion.get('node', 'Неизвестно')
+            planet = invasion.get('planet', '')
             
-            message += f"📍 **{invasion['node']}**\n"
-            message += f"⚔️ {attacker.get('name', 'Неизвестно')} vs {defender.get('name', 'Неизвестно')}\n"
-            message += f"📊 Прогресс: {invasion.get('completion', 0):.1f}%\n"
+            # Получаем названия сторон (теперь правильно!)
+            attacker_name = invasion.get('attacker', {}).get('name', 'Неизвестно')
+            defender_name = invasion.get('defender', {}).get('name', 'Неизвестно')
             
-            if reward:
-                reward_type = reward.get('type', '')
-                reward_name = reward.get('itemName', '')
-                if reward_type == 'reactor' or 'реактор' in reward_name.lower():
-                    message += "⚡ **Награда: Реактор Орокин!**\n"
-                elif reward_type == 'catalyst' or 'катализатор' in reward_name.lower():
-                    message += "🔧 **Награда: Катализатор Орокин!**\n"
-                else:
-                    message += f"🎁 Награда: {reward_name}\n"
+            # Получаем прогресс
+            completion = invasion.get('completion', 0)
+            if completion < 0:
+                completion = 0
+                
+            # Форматируем локацию
+            location = f"{node} ({planet})" if planet else node
             
+            message += f"📍 **{location}**\n"
+            message += f"⚔️ {attacker_name} vs {defender_name}\n"
+            message += f"📊 Прогресс: {completion:.1f}%\n"
+            
+            # Добавляем информацию о наградах
+            reward_desc = invasion.get('reward_description', '')
+            if reward_desc:
+                message += f"🎁 {reward_desc}\n"
+            
+            # Добавляем особые отметки
+            if invasion.get('has_reactor'):
+                message += "⚡ **РЕАКТОР ОРОКИН ДОСТУПЕН!**\n"
+            if invasion.get('has_catalyst'):
+                message += "🔧 **КАТАЛИЗАТОР ОРОКИН ДОСТУПЕН!**\n"
+            
+            # Добавляем время
             if invasion.get('eta'):
                 message += f"⏰ {invasion['eta']}\n"
+            
             message += "\n"
         
         return message
@@ -313,27 +392,15 @@ def format_notification(data_type: str, data) -> str:
         
         message = "⚡ **Арбитраж**\n\n"
         message += f"📍 **Узел:** {data['node']}\n"
-        message += f"🎯 **Тип миссии:** {data['mission_type']}\n"
-        message += f"👾 **Враг:** {data['enemy']}\n"
+        message += f"🎯 **Тип миссии:** {data.get('mission_type', data.get('type', 'Неизвестно'))}\n"
+        message += f"👾 **Враг:** {data.get('enemy', 'Неизвестно')}\n"
         message += f"⭐ **Тир карты:** {data.get('tier', 'Обычный')}\n"
-        message += f"⏰ **Доступен до:** {data['expiry']}\n"
+        message += f"⏰ **Доступен до:** {data.get('expiry', 'Неизвестно')}\n"
         
         if data.get('archwing'):
             message += "🛸 **Арчвинг активен**\n"
         if data.get('dark_sector'):
             message += "🌑 **Темный сектор**\n"
-        
-        # Добавляем рекомендации
-        recommendations = []
-        if 'выживание' in data['mission_type'].lower():
-            recommendations.append("💡 Рекомендуется: Танк/Поддержка")
-        elif 'захват' in data['mission_type'].lower():
-            recommendations.append("💡 Рекомендуется: Быстрый фрейм")
-        elif 'оборона' in data['mission_type'].lower():
-            recommendations.append("💡 Рекомендуется: Контроль толпы")
-        
-        if recommendations:
-            message += "\n" + "\n".join(recommendations)
         
         return message
     
@@ -347,9 +414,9 @@ def format_notification(data_type: str, data) -> str:
         message += f"⏰ Доступна до: {data['expiry']}\n\n"
         message += "**📋 Миссии:**\n"
         
-        for mission in data.get('missions', []):
-            message += f"• {mission.get('node', '')} - {mission.get('type', '')}\n"
-            message += f"  {mission.get('modifier', '')}\n"
+        for variant in data.get('missions', []):
+            message += f"• {variant.get('node', '')} - {variant.get('modifier', '')}\n"
+            message += f"  {variant.get('missionType', '')}\n"
         
         return message
     
@@ -363,7 +430,6 @@ def format_notification(data_type: str, data) -> str:
             message += f"🎁 **Текущая награда:** {reward.get('name', 'Неизвестно')}\n"
             message += f"🔄 **Ротация:** {data.get('rotation', '')}\n"
             message += f"⏰ **Доступно:** {data.get('remaining', '')}\n"
-            message += f"📊 **Информация:** {reward.get('description', '')}\n"
         else:
             message += "Текущая награда не определена\n"
         
@@ -379,13 +445,14 @@ def format_notification(data_type: str, data) -> str:
             mission = alert.get('mission', {})
             reward = alert.get('reward', {})
             
-            message += f"📍 **{mission.get('node', '')}**\n"
-            message += f"🎯 {mission.get('type', '')} - {mission.get('faction', '')}\n"
+            message += f"📍 **{mission.get('node', 'Неизвестно')}**\n"
+            message += f"🎯 {mission.get('type', 'Неизвестно')} - {mission.get('faction', '')}\n"
             
             if reward:
                 reward_name = reward.get('asString', '')
                 reward_credits = reward.get('credits', 0)
-                message += f"🎁 Награда: {reward_name} ({reward_credits}💰)\n"
+                if reward_name:
+                    message += f"🎁 Награда: {reward_name} ({reward_credits}💰)\n"
             
             if alert.get('eta'):
                 message += f"⏰ {alert['eta']}\n"
@@ -397,40 +464,13 @@ def format_notification(data_type: str, data) -> str:
         if not data:
             return "🌍 Данные о цикле Земли недоступны"
         
-        state = data.get('state', '')
-        time_left = data.get('time_left', '')
         is_day = data.get('is_day', False)
+        time_left = data.get('time_left', '')
         
         icon = "☀️" if is_day else "🌙"
         state_name = "День" if is_day else "Ночь"
         
         return f"{icon} **Цикл Земли**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
-    
-    elif data_type == 'venus_weather':
-        if not data:
-            return "🌡️ Данные о погоде на Венере недоступны"
-        
-        state = data.get('state', '')
-        time_left = data.get('time_left', '')
-        is_warm = data.get('is_warm', False)
-        
-        icon = "☀️" if is_warm else "❄️"
-        state_name = "Тепло" if is_warm else "Холодно"
-        
-        return f"{icon} **Погода на Венере**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
-    
-    elif data_type == 'deimos_cycle':
-        if not data:
-            return "🕷️ Данные о цикле Деймоса недоступны"
-        
-        state = data.get('state', '')
-        time_left = data.get('time_left', '')
-        is_vome = data.get('is_vome', False)
-        
-        icon = "🟢" if is_vome else "🔴"
-        state_name = "Воме" if is_vome else "Фасс"
-        
-        return f"{icon} **Цикл Деймоса**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
     
     elif data_type == 'duviri_mood':
         if not data:
@@ -451,80 +491,194 @@ def format_notification(data_type: str, data) -> str:
         
         return f"{mood_emoji} **Настроение Дувири**\n\nСостояние: {mood}\n⏰ До смены: {time_left}"
     
-    elif data_type == 'ergo_glast':
-        if not data or not data.get('inventory'):
-            return "🛍️ Эрго Гласт сейчас не предлагает товаров"
-        
-        message = "🛒 **Эрго Гласт**\n\n"
-        message += f"⏰ Обновление: {data.get('expiry', '')}\n\n"
-        message += "**📦 Доступные товары:**\n"
-        
-        for item in data.get('inventory', [])[:5]:
-            item_name = item.get('name', 'Неизвестно')
-            cost = item.get('cost', {})
-            item_type = item.get('type', '')
-            
-            message += f"• **{item_name}**\n"
-            
-            if cost.get('credits'):
-                message += f"  💰 {cost['credits']} кредитов\n"
-            if cost.get('plat'):
-                message += f"  💎 {cost['plat']} платины\n"
-            
-            # Характеристики оружия
-            if 'stats' in item:
-                stats = parse_weapon_stats(item)
-                if stats:
-                    message += f"  {stats}\n"
-            
-            message += "\n"
-        
-        return message
-    
-    elif data_type == 'eleonora':
-        if not data or not data.get('inventory'):
-            return "🛍️ Элеонора сейчас не предлагает товаров"
-        
-        message = "🛒 **Элеонора**\n\n"
-        message += f"⏰ Обновление: {data.get('expiry', '')}\n\n"
-        message += "**📦 Доступные товары:**\n"
-        
-        for item in data.get('inventory', [])[:5]:
-            item_name = item.get('name', 'Неизвестно')
-            cost = item.get('cost', {})
-            item_type = item.get('type', '')
-            
-            message += f"• **{item_name}**\n"
-            
-            if cost.get('credits'):
-                message += f"  💰 {cost['credits']} кредитов\n"
-            if cost.get('plat'):
-                message += f"  💎 {cost['plat']} платины\n"
-            
-            if 'stats' in item:
-                stats = parse_weapon_stats(item)
-                if stats:
-                    message += f"  {stats}\n"
-            
-            message += "\n"
-        
-        return message
-    
-    elif data_type == 'special_reward':
-        if not data:
-            return ""
-        
-        # Для реакторов и катализаторов
-        message = "⚡ **Специальная награда!**\n\n"
-        
-        if data.get('type') == 'reactor':
-            message += "🔧 **Реактор Орокин** доступен!\n"
-        elif data.get('type') == 'catalyst':
-            message += "💫 **Катализатор Орокин** доступен!\n"
-        
-        message += f"📍 {data.get('node', '')}\n"
-        message += f"⏰ Доступно до: {data.get('expiry', '')}\n"
-        
-        return message
-    
     return "Неизвестное уведомление"
+
+
+# ==============================================
+# ТЕСТОВЫЙ СКРИПТ ДЛЯ ПРОВЕРКИ API
+# ==============================================
+
+async def test_invasions():
+    """Тестирование получения вторжений с выводом полной структуры"""
+    print("=" * 60)
+    print("🔍 ТЕСТИРОВАНИЕ API ВТОРЖЕНИЙ")
+    print("=" * 60)
+    
+    url = "https://api.warframestat.us/pc/invasions"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    print(f"\n✅ Успешно получено {len(data)} вторжений\n")
+                    
+                    if data:
+                        # Показываем первое вторжение полностью
+                        print("📋 ПЕРВОЕ ВТОРЖЕНИЕ (полная структура):")
+                        print("-" * 60)
+                        print(json.dumps(data[0], indent=2, ensure_ascii=False))
+                        print("-" * 60)
+                        
+                        # Показываем все ключи
+                        print("\n🔑 КЛЮЧИ ПЕРВОГО ВТОРЖЕНИЯ:")
+                        print(f"  {list(data[0].keys())}")
+                        
+                        # Показываем структуру attacker
+                        if 'attacker' in data[0]:
+                            print("\n🔑 КЛЮЧИ ATTACKER:")
+                            print(f"  {list(data[0]['attacker'].keys())}")
+                            print(f"  Содержимое: {data[0]['attacker']}")
+                        
+                        # Показываем структуру defender
+                        if 'defender' in data[0]:
+                            print("\n🔑 КЛЮЧИ DEFENDER:")
+                            print(f"  {list(data[0]['defender'].keys())}")
+                            print(f"  Содержимое: {data[0]['defender']}")
+                        
+                        # Показываем все вторжения в кратком виде
+                        print("\n" + "=" * 60)
+                        print("📊 ВСЕ АКТИВНЫЕ ВТОРЖДЕНИЯ:")
+                        print("=" * 60)
+                        
+                        for i, inv in enumerate(data[:10], 1):
+                            if inv.get('completed', False):
+                                continue
+                                
+                            node = inv.get('node', 'Неизвестно')
+                            completion = inv.get('completion', 0)
+                            
+                            attacker = inv.get('attacker', {})
+                            defender = inv.get('defender', {})
+                            attacker_name = attacker.get('faction', 'Неизвестно')
+                            defender_name = defender.get('faction', 'Неизвестно')
+                            
+                            # Получаем награды
+                            attacker_reward = attacker.get('reward', {})
+                            defender_reward = defender.get('reward', {})
+                            
+                            attacker_items = []
+                            if 'countedItems' in attacker_reward:
+                                for item in attacker_reward['countedItems']:
+                                    attacker_items.append(item.get('type', ''))
+                            
+                            defender_items = []
+                            if 'countedItems' in defender_reward:
+                                for item in defender_reward['countedItems']:
+                                    defender_items.append(item.get('type', ''))
+                            
+                            print(f"\n{i}. 📍 {node}")
+                            print(f"   ⚔️ {attacker_name} vs {defender_name}")
+                            print(f"   📊 Прогресс: {completion:.1f}%")
+                            if attacker_items:
+                                print(f"   🔵 Награда {attacker_name}: {', '.join(attacker_items[:3])}")
+                            if defender_items:
+                                print(f"   🔴 Награда {defender_name}: {', '.join(defender_items[:3])}")
+                            if inv.get('eta'):
+                                print(f"   ⏰ {inv.get('eta')}")
+                        
+                        # Проверяем наличие реакторов/катализаторов
+                        print("\n" + "=" * 60)
+                        print("🔍 ПОИСК РЕАКТОРОВ И КАТАЛИЗАТОРОВ:")
+                        print("=" * 60)
+                        
+                        found_special = False
+                        for inv in data:
+                            if inv.get('completed', False):
+                                continue
+                                
+                            attacker = inv.get('attacker', {})
+                            defender = inv.get('defender', {})
+                            
+                            attacker_reward = attacker.get('reward', {})
+                            defender_reward = defender.get('reward', {})
+                            
+                            all_items = []
+                            if 'countedItems' in attacker_reward:
+                                for item in attacker_reward['countedItems']:
+                                    all_items.append(item.get('type', ''))
+                            if 'countedItems' in defender_reward:
+                                for item in defender_reward['countedItems']:
+                                    all_items.append(item.get('type', ''))
+                            
+                            for item in all_items:
+                                if 'reactor' in item.lower() or 'catalyst' in item.lower():
+                                    found_special = True
+                                    print(f"\n📍 {inv.get('node', 'Неизвестно')}")
+                                    print(f"   🎁 {item}")
+                        
+                        if not found_special:
+                            print("\n❌ Реакторов или катализаторов не найдено")
+                        
+                    else:
+                        print("❌ Нет данных о вторжениях")
+                        
+                else:
+                    print(f"❌ Ошибка: {response.status}")
+                    
+    except Exception as e:
+        print(f"❌ Исключение: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+async def test_all_endpoints():
+    """Тестирование всех эндпоинтов"""
+    print("\n" + "=" * 60)
+    print("🔍 ТЕСТИРОВАНИЕ ВСЕХ ЭНДПОИНТОВ")
+    print("=" * 60)
+    
+    endpoints = [
+        ("voidTrader", "Торговец из Бездны"),
+        ("fissures", "Разрывы Бездны"),
+        ("invasions", "Вторжения"),
+        ("sortie", "Сортировка"),
+        ("arbitration", "Арбитраж"),
+        ("archonHunt", "Охота на Архонтов"),
+        ("steelPath", "Стальной Путь"),
+        ("alerts", "Тревоги"),
+        ("earthCycle", "Цикл Земли"),
+        ("duviriCycle", "Дувири")
+    ]
+    
+    async with aiohttp.ClientSession() as session:
+        for endpoint, name in endpoints:
+            try:
+                url = f"{WARFRAME_API_URL}/{endpoint}"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data:
+                            if isinstance(data, list):
+                                print(f"✅ {name}: {len(data)} записей")
+                                if data:
+                                    print(f"   Ключи: {list(data[0].keys())[:5]}...")
+                            else:
+                                print(f"✅ {name}: {len(data)} полей")
+                                print(f"   Ключи: {list(data.keys())[:5]}...")
+                        else:
+                            print(f"⚠️ {name}: Пустой ответ")
+                    else:
+                        print(f"❌ {name}: HTTP {response.status}")
+            except Exception as e:
+                print(f"❌ {name}: Ошибка - {e}")
+
+
+def run_tests():
+    """Запуск всех тестов"""
+    print("\n🚀 ЗАПУСК ТЕСТОВ API")
+    print("=" * 60)
+    
+    # Запускаем тест вторжений
+    asyncio.run(test_invasions())
+    
+    # Запускаем тест всех эндпоинтов
+    asyncio.run(test_all_endpoints())
+    
+    print("\n" + "=" * 60)
+    print("✅ ТЕСТЫ ЗАВЕРШЕНЫ")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    run_tests()
