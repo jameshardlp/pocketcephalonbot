@@ -33,10 +33,15 @@ def get_status_buttons(user_settings, category='main'):
     elif category == 'cycles':
         statuses = {
             'notify_earth_cycle': '🌍 Цикл Земли',
+            'notify_venus_weather': '🌡️ Погода Венеры',
+            'notify_deimos_cycle': '🕷️ Цикл Деймоса',
             'notify_duviri_mood': '🎭 Настроение Дувири'
         }
     elif category == 'traders':
         statuses = {
+            'notify_ergo_glast': '🛒 Эрго Гласт (Реле)',
+            'notify_cavalero': '🛒 Кавалеро (Зариман)',
+            'notify_eleonora': '🛒 Элеонора (Хёльвания)',
             'notify_nightwave': '🌙 Ночная Волна'
         }
     else:
@@ -74,6 +79,8 @@ def get_info_menu():
 def get_cycle_menu():
     keyboard = [
         [InlineKeyboardButton("🌍 Цикл Земли", callback_data='info_earth_cycle')],
+        [InlineKeyboardButton("🌡️ Погода Венеры", callback_data='info_venus_weather')],
+        [InlineKeyboardButton("🕷️ Цикл Деймоса", callback_data='info_deimos_cycle')],
         [InlineKeyboardButton("🎭 Настроение Дувири", callback_data='info_duviri_mood')],
         [InlineKeyboardButton("🔙 Назад", callback_data='get_info')]
     ]
@@ -81,6 +88,9 @@ def get_cycle_menu():
 
 def get_trader_menu():
     keyboard = [
+        [InlineKeyboardButton("🛒 Эрго Гласт (Реле)", callback_data='info_ergo_glast')],
+        [InlineKeyboardButton("🛒 Кавалеро (Зариман)", callback_data='info_cavalero')],
+        [InlineKeyboardButton("🛒 Элеонора (Хёльвания)", callback_data='info_eleonora')],
         [InlineKeyboardButton("🌙 Ночная Волна", callback_data='info_nightwave')],
         [InlineKeyboardButton("🔙 Назад", callback_data='get_info')]
     ]
