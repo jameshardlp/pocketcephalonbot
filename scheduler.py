@@ -40,6 +40,7 @@ class NotificationScheduler:
                 self.check_steel_path(),
                 self.check_alerts(),
                 self.check_cycles(),
+                self.check_traders(),
                 self.check_nightwave()
             ]
             await asyncio.gather(*tasks, return_exceptions=True)
@@ -47,122 +48,243 @@ class NotificationScheduler:
             logger.error(f"Error in check_all: {e}")
     
     async def check_baro(self):
-        data = await WarframeAPI.get_baro_trader()
-        if data and data.get('active') and data.get('inventory'):
-            key = 'baro_hash'
-            baro_hash = hash(str(data.get('inventory', [])))
-            if key not in self.last_data or self.last_data[key] != baro_hash:
-                self.last_data[key] = baro_hash
-                message = format_notification('baro', data)
-                await self.notify_all('notify_baro', message, 'baro')
+        try:
+            data = await WarframeAPI.get_baro_trader()
+            if data and data.get('active') and data.get('inventory'):
+                key = 'baro_hash'
+                baro_hash = hash(str(data.get('inventory', [])))
+                if key not in self.last_data or self.last_data[key] != baro_hash:
+                    self.last_data[key] = baro_hash
+                    message = format_notification('baro', data)
+                    if message:
+                        await self.notify_all('notify_baro', message, 'baro')
+        except Exception as e:
+            logger.error(f"Error in check_baro: {e}")
     
     async def check_fissures(self):
-        data = await WarframeAPI.get_fissures()
-        if data:
-            key = 'fissures_hash'
-            fissures_hash = hash(str([(f['id'], f['expiry']) for f in data]))
-            if key not in self.last_data or self.last_data[key] != fissures_hash:
-                self.last_data[key] = fissures_hash
-                message = format_notification('fissures', data)
-                await self.notify_all('notify_fissures', message, 'fissures')
+        try:
+            data = await WarframeAPI.get_fissures()
+            if data:
+                key = 'fissures_hash'
+                fissures_hash = hash(str([(f['id'], f['expiry']) for f in data]))
+                if key not in self.last_data or self.last_data[key] != fissures_hash:
+                    self.last_data[key] = fissures_hash
+                    message = format_notification('fissures', data)
+                    if message:
+                        await self.notify_all('notify_fissures', message, 'fissures')
+        except Exception as e:
+            logger.error(f"Error in check_fissures: {e}")
     
     async def check_invasions(self):
-        data = await WarframeAPI.get_invasions()
-        if data:
-            key = 'invasions_hash'
-            invasions_hash = hash(str([(inv['id'], inv['completion']) for inv in data if inv.get('completion', 0) < 100]))
-            if key not in self.last_data or self.last_data[key] != invasions_hash:
-                self.last_data[key] = invasions_hash
-                message = format_notification('invasions', data)
-                await self.notify_all('notify_invasions', message, 'invasions')
+        try:
+            data = await WarframeAPI.get_invasions()
+            if data:
+                key = 'invasions_hash'
+                invasions_hash = hash(str([(inv['id'], inv['completion']) for inv in data if inv.get('completion', 0) < 100]))
+                if key not in self.last_data or self.last_data[key] != invasions_hash:
+                    self.last_data[key] = invasions_hash
+                    message = format_notification('invasions', data)
+                    if message:
+                        await self.notify_all('notify_invasions', message, 'invasions')
+        except Exception as e:
+            logger.error(f"Error in check_invasions: {e}")
     
     async def check_sortie(self):
-        data = await WarframeAPI.get_sortie()
-        if data:
-            key = 'sortie_hash'
-            sortie_hash = hash(str(data.get('variants', [])))
-            if key not in self.last_data or self.last_data[key] != sortie_hash:
-                self.last_data[key] = sortie_hash
-                message = format_notification('sortie', data)
-                await self.notify_all('notify_sortie', message, 'sortie')
+        try:
+            data = await WarframeAPI.get_sortie()
+            if data:
+                key = 'sortie_hash'
+                sortie_hash = hash(str(data.get('variants', [])))
+                if key not in self.last_data or self.last_data[key] != sortie_hash:
+                    self.last_data[key] = sortie_hash
+                    message = format_notification('sortie', data)
+                    if message:
+                        await self.notify_all('notify_sortie', message, 'sortie')
+        except Exception as e:
+            logger.error(f"Error in check_sortie: {e}")
     
     async def check_arbitration(self):
-        data = await WarframeAPI.get_arbitration()
-        if data:
-            key = 'arbitration_hash'
-            arb_hash = hash(str(data))
-            if key not in self.last_data or self.last_data[key] != arb_hash:
-                self.last_data[key] = arb_hash
-                message = format_notification('arbitration', data)
-                await self.notify_all('notify_arbitration', message, 'arbitration')
+        try:
+            data = await WarframeAPI.get_arbitration()
+            if data:
+                key = 'arbitration_hash'
+                arb_hash = hash(str(data))
+                if key not in self.last_data or self.last_data[key] != arb_hash:
+                    self.last_data[key] = arb_hash
+                    message = format_notification('arbitration', data)
+                    if message:
+                        await self.notify_all('notify_arbitration', message, 'arbitration')
+        except Exception as e:
+            logger.error(f"Error in check_arbitration: {e}")
     
     async def check_archon(self):
-        data = await WarframeAPI.get_archon_hunt()
-        if data:
-            key = 'archon_hash'
-            archon_hash = hash(str(data.get('missions', [])))
-            if key not in self.last_data or self.last_data[key] != archon_hash:
-                self.last_data[key] = archon_hash
-                message = format_notification('archon', data)
-                await self.notify_all('notify_archon', message, 'archon')
+        try:
+            data = await WarframeAPI.get_archon_hunt()
+            if data:
+                key = 'archon_hash'
+                archon_hash = hash(str(data.get('missions', [])))
+                if key not in self.last_data or self.last_data[key] != archon_hash:
+                    self.last_data[key] = archon_hash
+                    message = format_notification('archon', data)
+                    if message:
+                        await self.notify_all('notify_archon', message, 'archon')
+        except Exception as e:
+            logger.error(f"Error in check_archon: {e}")
     
     async def check_steel_path(self):
-        data = await WarframeAPI.get_steel_path()
-        if data and data.get('active'):
-            key = 'steel_path_hash'
-            sp_hash = hash(str(data.get('current_reward', {})))
-            if key not in self.last_data or self.last_data[key] != sp_hash:
-                self.last_data[key] = sp_hash
-                message = format_notification('steel_path', data)
-                await self.notify_all('notify_steel_path', message, 'steel_path')
+        try:
+            data = await WarframeAPI.get_steel_path()
+            if data and data.get('active'):
+                key = 'steel_path_hash'
+                sp_hash = hash(str(data.get('current_reward', {})))
+                if key not in self.last_data or self.last_data[key] != sp_hash:
+                    self.last_data[key] = sp_hash
+                    message = format_notification('steel_path', data)
+                    if message:
+                        await self.notify_all('notify_steel_path', message, 'steel_path')
+        except Exception as e:
+            logger.error(f"Error in check_steel_path: {e}")
     
     async def check_alerts(self):
-        data = await WarframeAPI.get_alerts()
-        if data:
-            key = 'alerts_hash'
-            alerts_hash = hash(str([(a['id'], a['expiry']) for a in data]))
-            if key not in self.last_data or self.last_data[key] != alerts_hash:
-                self.last_data[key] = alerts_hash
-                message = format_notification('alerts', data)
-                await self.notify_all('notify_alerts', message, 'alerts')
+        try:
+            data = await WarframeAPI.get_alerts()
+            if data:
+                key = 'alerts_hash'
+                alerts_hash = hash(str([(a['id'], a['expiry']) for a in data]))
+                if key not in self.last_data or self.last_data[key] != alerts_hash:
+                    self.last_data[key] = alerts_hash
+                    message = format_notification('alerts', data)
+                    if message:
+                        await self.notify_all('notify_alerts', message, 'alerts')
+        except Exception as e:
+            logger.error(f"Error in check_alerts: {e}")
     
     async def check_cycles(self):
-        earth = await WarframeAPI.get_earth_cycle()
-        if earth:
-            key = 'earth_hash'
-            earth_hash = hash(str(earth.get('state')))
-            if key not in self.last_data or self.last_data[key] != earth_hash:
-                self.last_data[key] = earth_hash
-                message = format_notification('earth_cycle', earth)
-                await self.notify_all('notify_earth_cycle', message, 'earth_cycle')
+        # Земля
+        try:
+            earth = await WarframeAPI.get_earth_cycle()
+            if earth:
+                key = 'earth_hash'
+                earth_hash = hash(str(earth.get('state')))
+                if key not in self.last_data or self.last_data[key] != earth_hash:
+                    self.last_data[key] = earth_hash
+                    message = format_notification('earth_cycle', earth)
+                    if message:
+                        await self.notify_all('notify_earth_cycle', message, 'earth_cycle')
+        except Exception as e:
+            logger.error(f"Error in check_earth_cycle: {e}")
         
-        duviri = await WarframeAPI.get_duviri_mood()
-        if duviri:
-            key = 'duviri_hash'
-            duviri_hash = hash(str(duviri.get('mood')))
-            if key not in self.last_data or self.last_data[key] != duviri_hash:
-                self.last_data[key] = duviri_hash
-                message = format_notification('duviri_mood', duviri)
-                await self.notify_all('notify_duviri_mood', message, 'duviri_mood')
+        # Венера
+        try:
+            venus = await WarframeAPI.get_venus_weather()
+            if venus:
+                key = 'venus_hash'
+                venus_hash = hash(str(venus.get('state')))
+                if key not in self.last_data or self.last_data[key] != venus_hash:
+                    self.last_data[key] = venus_hash
+                    message = format_notification('venus_weather', venus)
+                    if message:
+                        await self.notify_all('notify_venus_weather', message, 'venus_weather')
+        except Exception as e:
+            logger.error(f"Error in check_venus_weather: {e}")
+        
+        # Деймос
+        try:
+            deimos = await WarframeAPI.get_deimos_cycle()
+            if deimos:
+                key = 'deimos_hash'
+                deimos_hash = hash(str(deimos.get('state')))
+                if key not in self.last_data or self.last_data[key] != deimos_hash:
+                    self.last_data[key] = deimos_hash
+                    message = format_notification('deimos_cycle', deimos)
+                    if message:
+                        await self.notify_all('notify_deimos_cycle', message, 'deimos_cycle')
+        except Exception as e:
+            logger.error(f"Error in check_deimos_cycle: {e}")
+        
+        # Дувири
+        try:
+            duviri = await WarframeAPI.get_duviri_mood()
+            if duviri:
+                key = 'duviri_hash'
+                duviri_hash = hash(str(duviri.get('mood')))
+                if key not in self.last_data or self.last_data[key] != duviri_hash:
+                    self.last_data[key] = duviri_hash
+                    message = format_notification('duviri_mood', duviri)
+                    if message:
+                        await self.notify_all('notify_duviri_mood', message, 'duviri_mood')
+        except Exception as e:
+            logger.error(f"Error in check_duviri_mood: {e}")
+    
+    async def check_traders(self):
+        # Эрго Гласт
+        try:
+            ergo = await WarframeAPI.get_ergo_glast()
+            if ergo and ergo.get('inventory'):
+                key = 'ergo_hash'
+                ergo_hash = hash(str(ergo.get('inventory', [])))
+                if key not in self.last_data or self.last_data[key] != ergo_hash:
+                    self.last_data[key] = ergo_hash
+                    message = format_notification('ergo_glast', ergo)
+                    if message:
+                        await self.notify_all('notify_ergo_glast', message, 'ergo_glast')
+        except Exception as e:
+            logger.error(f"Error in check_ergo_glast: {e}")
+        
+        # Кавалеро
+        try:
+            cavalero = await WarframeAPI.get_cavalero()
+            if cavalero and cavalero.get('inventory'):
+                key = 'cavalero_hash'
+                cavalero_hash = hash(str(cavalero.get('inventory', [])))
+                if key not in self.last_data or self.last_data[key] != cavalero_hash:
+                    self.last_data[key] = cavalero_hash
+                    message = format_notification('cavalero', cavalero)
+                    if message:
+                        await self.notify_all('notify_cavalero', message, 'cavalero')
+        except Exception as e:
+            logger.error(f"Error in check_cavalero: {e}")
+        
+        # Элеонора
+        try:
+            eleonora = await WarframeAPI.get_eleonora()
+            if eleonora and eleonora.get('inventory'):
+                key = 'eleonora_hash'
+                eleonora_hash = hash(str(eleonora.get('inventory', [])))
+                if key not in self.last_data or self.last_data[key] != eleonora_hash:
+                    self.last_data[key] = eleonora_hash
+                    message = format_notification('eleonora', eleonora)
+                    if message:
+                        await self.notify_all('notify_eleonora', message, 'eleonora')
+        except Exception as e:
+            logger.error(f"Error in check_eleonora: {e}")
     
     async def check_nightwave(self):
-        data = await WarframeAPI.get_nightwave()
-        if data:
-            key = 'nightwave_hash'
-            nightwave_hash = hash(str(data.get('offers', [])))
-            if key not in self.last_data or self.last_data[key] != nightwave_hash:
-                self.last_data[key] = nightwave_hash
-                message = format_notification('nightwave', data)
-                await self.notify_all('notify_nightwave', message, 'nightwave')
+        try:
+            data = await WarframeAPI.get_nightwave()
+            if data:
+                key = 'nightwave_hash'
+                nightwave_hash = hash(str(data.get('offers', [])))
+                if key not in self.last_data or self.last_data[key] != nightwave_hash:
+                    self.last_data[key] = nightwave_hash
+                    message = format_notification('nightwave', data)
+                    if message:
+                        await self.notify_all('notify_nightwave', message, 'nightwave')
+        except Exception as e:
+            logger.error(f"Error in check_nightwave: {e}")
     
     async def notify_all(self, setting_name, message, notification_type):
         from database import Session, User
         session = Session()
-        users = session.query(User).filter(getattr(User, setting_name) == True).all()
-        session.close()
-        
-        for user in users:
-            await self.send_notification(user.telegram_id, message, notification_type)
+        try:
+            users = session.query(User).filter(getattr(User, setting_name) == True).all()
+            session.close()
+            
+            for user in users:
+                await self.send_notification(user.telegram_id, message, notification_type)
+        except Exception as e:
+            logger.error(f"Error in notify_all: {e}")
+            session.close()
     
     async def send_notification(self, telegram_id, message, notification_type):
         now = datetime.utcnow()
@@ -182,6 +304,7 @@ class NotificationScheduler:
             )
             self.last_send_time[telegram_id] = now
             save_history(telegram_id, notification_type, message)
+            logger.info(f"Sent {notification_type} notification to {telegram_id}")
         except Exception as e:
             logger.error(f"Error sending notification to {telegram_id}: {e}")
             add_to_queue(telegram_id, notification_type, message)
