@@ -170,10 +170,15 @@ class WarframeAPI:
     async def get_arbitration() -> Optional[Dict]:
         """
         Получение данных об Арбитраже.
-        Сначала пытается получить из официального API.
-        Если API не даёт данных, использует парсинг browse.wf.
+        Основной источник - парсинг browse.wf (более надежный).
+        Официальное API используется как резервный.
         """
-        # 1. Сначала пробуем официальное API
+        # 1. Сначала пробуем browse.wf (основной источник)
+        browse_data = await WarframeAPI.get_arbitration_from_browse()
+        if browse_data:
+            return browse_data
+        
+        # 2. Если browse.wf не дал данных, пробуем официальное API
         data = await WarframeAPI.fetch_data("arbitration")
         if data:
             if not data.get('expired', True):
@@ -188,11 +193,6 @@ class WarframeAPI:
                         'sharkwing': data.get('sharkwing', False),
                         'source': 'api'
                     }
-        
-        # 2. Если API не дал данных, пробуем browse.wf
-        browse_data = await WarframeAPI.get_arbitration_from_browse()
-        if browse_data:
-            return browse_data
         
         return None
 
@@ -209,6 +209,7 @@ class WarframeAPI:
                         return None
                     html = await response.text()
                     
+                    # Ищем блок "Next Occurrence"
                     next_occurrence_match = re.search(
                         r'Next Occurrence\s*</?strong>?\s*</?h2>?\s*<ul>(.*?)</ul>',
                         html,
@@ -234,6 +235,7 @@ class WarframeAPI:
                     if not clean_lines:
                         return None
                     
+                    # Берем первую миссию (она самая ближайшая)
                     first_mission = clean_lines[0]
                     parts = first_mission.split(' | ', 1)
                     if len(parts) != 2:
@@ -241,6 +243,7 @@ class WarframeAPI:
                     
                     date_time_str, mission_details = parts[0], parts[1]
                     
+                    # Парсим детали миссии
                     mission_parts = mission_details.split(' @ ')
                     if len(mission_parts) != 2:
                         return None
@@ -248,6 +251,7 @@ class WarframeAPI:
                     left_part = mission_parts[0].strip()
                     right_part = mission_parts[1].strip()
                     
+                    # Извлекаем узел, планету и бонус
                     node_planet_bonus = right_part.split(' (', 1)
                     node_planet = node_planet_bonus[0].strip()
                     bonus = f"({node_planet_bonus[1]}" if len(node_planet_bonus) > 1 else ''
