@@ -1,0 +1,174 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: #ffffff;
+    min-height: 100vh;
+    padding: 10px;
+}
+
+#app {
+    max-width: 400px;
+    margin: 0 auto;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #ff6b6b, #ffd93d);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.update-time {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.notifications {
+    max-height: 500px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+
+.notifications::-webkit-scrollbar {
+    width: 4px;
+}
+
+.notifications::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.notification-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-left: 3px solid #ff6b6b;
+    animation: slideIn 0.3s ease-out;
+}
+
+.notification-item .type {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.notification-item .content {
+    font-size: 13px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.notification-item .content strong {
+    color: #ffd93d;
+}
+
+.notification-item .time {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.3);
+    margin-top: 4px;
+}
+
+.notification-item.baro { border-left-color: #ff6b6b; }
+.notification-item.fissures { border-left-color: #4ecdc4; }
+.notification-item.invasions { border-left-color: #ff6b6b; }
+.notification-item.sortie { border-left-color: #ffd93d; }
+.notification-item.arbitration { border-left-color: #a29bfe; }
+.notification-item.archon { border-left-color: #fd79a8; }
+.notification-item.steel_path { border-left-color: #dfe6e9; }
+.notification-item.alerts { border-left-color: #fdcb6e; }
+.notification-item.cycle { border-left-color: #00b894; }
+.notification-item.trader { border-left-color: #e17055; }
+.notification-item.special { border-left-color: #ff7675; }
+
+.footer {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.footer button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.footer button:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.02);
+}
+
+.footer button:active {
+    transform: scale(0.98);
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Адаптивность для виджета */
+@media (max-width: 400px) {
+    #app {
+        padding: 12px;
+        border-radius: 12px;
+    }
+    
+    .notification-item .content {
+        font-size: 12px;
+    }
+}
+
+/* Темная тема для iOS/Android */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #0a0a1a;
+    }
+}
