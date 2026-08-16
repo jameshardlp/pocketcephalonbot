@@ -6,7 +6,6 @@ import logging
 
 from config import CHECK_INTERVAL
 from database import add_to_queue, save_history, get_user
-from warframe_api import WarframeAPI, format_notification
 
 logger = logging.getLogger(__name__)
 
