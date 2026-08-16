@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, JSON, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -9,7 +7,6 @@ import os
 
 from config import DATABASE_URL
 
-# Настройка engine
 engine = create_engine(
     DATABASE_URL,
     echo=False,
@@ -47,7 +44,9 @@ class User(Base):
     
     # Торговцы
     notify_ergo_glast = Column(Boolean, default=True)
+    notify_cavalero = Column(Boolean, default=True)
     notify_eleonora = Column(Boolean, default=True)
+    notify_nightwave = Column(Boolean, default=True)
     
     # Реакторы и катализаторы
     notify_reactor = Column(Boolean, default=True)
@@ -83,7 +82,6 @@ class NotificationHistory(Base):
     sent_at = Column(DateTime, default=datetime.utcnow)
 
 def init_db():
-    """Инициализация базы данных - создание всех таблиц"""
     try:
         Base.metadata.create_all(engine)
         print("✅ Database initialized successfully")
