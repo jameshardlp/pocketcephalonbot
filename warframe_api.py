@@ -34,8 +34,11 @@ class WarframeAPI:
                     'type': item.get('type', '')
                 })
             
+            # Проверяем активность по наличию инвентаря
+            is_active = len(inventory) > 0
+            
             return {
-                'active': data.get('active', False),
+                'active': is_active,
                 'location': data.get('location', 'Неизвестно'),
                 'inventory': inventory,
                 'expiry': data.get('expiry', ''),
@@ -177,6 +180,12 @@ class WarframeAPI:
                     'faction': variant.get('faction', '')
                 })
             
+            # Проверяем, активна ли вылазка (есть варианты миссий)
+            is_active = len(variants) > 0
+            
+            if not is_active:
+                return None
+            
             return {
                 'boss': data.get('boss', 'Неизвестно'),
                 'faction': data.get('faction', 'Неизвестно'),
@@ -190,8 +199,12 @@ class WarframeAPI:
     async def get_arbitration() -> Optional[Dict]:
         data = await WarframeAPI.fetch_data("arbitration")
         if data:
+            # Проверяем expired и наличие данных
             expired = data.get('expired', True)
-            if expired:
+            node = data.get('node', '')
+            
+            # Если expired == True или node пустой или SolNode000 - значит арбитраж недоступен
+            if expired or node == 'SolNode000' or not node:
                 return None
             
             return {
@@ -224,6 +237,10 @@ class WarframeAPI:
                     'expiry': ''
                 })
             
+            # Проверяем, есть ли миссии
+            if not missions:
+                return None
+            
             return {
                 'boss': data.get('boss', 'Неизвестно'),
                 'faction': data.get('faction', 'Неизвестно'),
@@ -237,6 +254,10 @@ class WarframeAPI:
     async def get_steel_path() -> Optional[Dict]:
         data = await WarframeAPI.fetch_data("steelPath")
         if data:
+            # Проверяем active
+            if not data.get('active', False):
+                return None
+            
             return {
                 'active': data.get('active', False),
                 'current_reward': data.get('currentReward', {}),
@@ -250,13 +271,23 @@ class WarframeAPI:
     async def get_alerts() -> Optional[List[Dict]]:
         data = await WarframeAPI.fetch_data("alerts")
         if data:
-            return [{
-                'id': alert.get('id', ''),
-                'mission': alert.get('mission', {}),
-                'reward': alert.get('reward', {}),
-                'expiry': alert.get('expiry', ''),
-                'eta': alert.get('eta', '')
-            } for alert in data]
+            alerts = []
+            for alert in data:
+                expiry = alert.get('expiry', '')
+                if expiry:
+                    try:
+                        expiry_time = datetime.fromisoformat(expiry.replace('Z', '+00:00'))
+                        if expiry_time > datetime.utcnow():
+                            alerts.append({
+                                'id': alert.get('id', ''),
+                                'mission': alert.get('mission', {}),
+                                'reward': alert.get('reward', {}),
+                                'expiry': alert.get('expiry', ''),
+                                'eta': alert.get('eta', '')
+                            })
+                    except:
+                        pass
+            return alerts if alerts else None
         return []
     
     @staticmethod
@@ -332,7 +363,7 @@ class WarframeAPI:
 def format_notification(data_type: str, data) -> str:
     if data_type == 'baro':
         if not data or not data.get('active'):
-            return "🚫 Торговец из Бездны сейчас неактивен"
+            return "🧛 Торговец из Бездны сейчас неактивен"
         
         character_name = data.get('character', "Baro Ki'Teer")
         message = f"🧛 **{character_name}**\n"
@@ -350,7 +381,7 @@ def format_notification(data_type: str, data) -> str:
     
     elif data_type == 'fissures':
         if not data:
-            return "🚫 Активных разрывов Бездны нет"
+            return "💠 Активных разрывов Бездны нет"
         
         message = "💠 **Активные разрывы Бездны**\n\n"
         tier_order = {'Лито': 1, 'Мезо': 2, 'Нео': 3, 'Акси': 4}
@@ -369,7 +400,7 @@ def format_notification(data_type: str, data) -> str:
     
     elif data_type == 'invasions':
         if not data:
-            return "🚫 Активных вторжений нет"
+            return "⚔️ Активных вторжений нет"
         
         message = "⚔️ **Активные вторжения**\n\n"
         
@@ -379,7 +410,7 @@ def format_notification(data_type: str, data) -> str:
             completed = [inv for inv in data if inv.get('completion', 0) >= 100]
             if completed:
                 return "⚔️ Все вторжения завершены! Новые появятся позже."
-            return "🚫 Нет активных вторжений"
+            return "⚔️ Активных вторжений нет"
         
         for invasion in active_invasions[:10]:
             node = invasion.get('node', 'Неизвестно')
@@ -413,7 +444,7 @@ def format_notification(data_type: str, data) -> str:
     
     elif data_type == 'sortie':
         if not data:
-            return "🚫 Вылазка сейчас недоступна"
+            return "🎯 Вылазка сейчас недоступна"
         
         message = "🎯 **Вылазка**\n\n"
         message += f"👾 **Босс:** {data.get('boss', 'Неизвестно')}\n"
@@ -437,7 +468,7 @@ def format_notification(data_type: str, data) -> str:
     
     elif data_type == 'arbitration':
         if not data:
-            return "🚫 Арбитраж сейчас недоступен"
+            return "⚡ Арбитраж сейчас недоступен"
         
         message = "⚡ **Арбитраж**\n\n"
         message += f"📍 **Узел:** {data.get('node', 'Неизвестно')}\n"
@@ -454,7 +485,7 @@ def format_notification(data_type: str, data) -> str:
     
     elif data_type == 'archon':
         if not data:
-            return "🚫 Охота на Архонтов сейчас недоступна"
+            return "🔥 Охота на Архонтов сейчас недоступна"
         
         message = "🔥 **Охота на Архонтов**\n\n"
         message += f"👾 **Босс:** {data.get('boss', 'Неизвестно')}\n"
@@ -480,7 +511,7 @@ def format_notification(data_type: str, data) -> str:
         return message
     
     elif data_type == 'steel_path':
-        if not data or not data.get('active'):
+        if not data:
             return "🗡️ Стальной Путь сейчас неактивен"
         
         message = "🗡️ **Стальной Путь**\n\n"
@@ -496,7 +527,7 @@ def format_notification(data_type: str, data) -> str:
     
     elif data_type == 'alerts':
         if not data:
-            return "🚫 Активных тревог нет"
+            return "🚨 Активных тревог нет"
         
         message = "🚨 **Активные тревоги**\n\n"
         
