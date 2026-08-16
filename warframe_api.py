@@ -34,7 +34,6 @@ class WarframeAPI:
                     'type': item.get('type', '')
                 })
             
-            # Проверяем активность по наличию инвентаря
             is_active = len(inventory) > 0
             
             return {
@@ -180,10 +179,7 @@ class WarframeAPI:
                     'faction': variant.get('faction', '')
                 })
             
-            # Проверяем, активна ли вылазка (есть варианты миссий)
-            is_active = len(variants) > 0
-            
-            if not is_active:
+            if not variants:
                 return None
             
             return {
@@ -199,11 +195,9 @@ class WarframeAPI:
     async def get_arbitration() -> Optional[Dict]:
         data = await WarframeAPI.fetch_data("arbitration")
         if data:
-            # Проверяем expired и наличие данных
             expired = data.get('expired', True)
             node = data.get('node', '')
             
-            # Если expired == True или node пустой или SolNode000 - значит арбитраж недоступен
             if expired or node == 'SolNode000' or not node:
                 return None
             
@@ -237,7 +231,6 @@ class WarframeAPI:
                     'expiry': ''
                 })
             
-            # Проверяем, есть ли миссии
             if not missions:
                 return None
             
@@ -254,7 +247,6 @@ class WarframeAPI:
     async def get_steel_path() -> Optional[Dict]:
         data = await WarframeAPI.fetch_data("steelPath")
         if data:
-            # Проверяем active
             if not data.get('active', False):
                 return None
             
@@ -303,10 +295,26 @@ class WarframeAPI:
     
     @staticmethod
     async def get_venus_weather() -> Optional[Dict]:
+        """Погода на Венере"""
+        data = await WarframeAPI.fetch_data("venusWeather")
+        if data:
+            return {
+                'state': data.get('state', ''),
+                'time_left': data.get('timeLeft', ''),
+                'is_warm': data.get('isWarm', False)
+            }
         return None
     
     @staticmethod
     async def get_deimos_cycle() -> Optional[Dict]:
+        """Цикл Деймоса (Фасс/Воме)"""
+        data = await WarframeAPI.fetch_data("deimosCycle")
+        if data:
+            return {
+                'state': data.get('state', ''),
+                'time_left': data.get('timeLeft', ''),
+                'is_vome': data.get('isVome', False)
+            }
         return None
     
     @staticmethod
@@ -322,14 +330,109 @@ class WarframeAPI:
     
     @staticmethod
     async def get_ergo_glast() -> Optional[Dict]:
+        """Эрго Гласт - торговец в Реле"""
+        data = await WarframeAPI.fetch_data("ergoGlast")
+        if data and data.get('inventory'):
+            inventory = []
+            for item in data.get('inventory', []):
+                cost = item.get('cost', {})
+                
+                stats = []
+                if 'stats' in item:
+                    for stat in item['stats']:
+                        if stat.get('positive', ''):
+                            stats.append(f"✅ {stat['positive']}")
+                        if stat.get('negative', ''):
+                            stats.append(f"❌ {stat['negative']}")
+                
+                inventory.append({
+                    'name': item.get('name', 'Неизвестно'),
+                    'type': item.get('type', ''),
+                    'cost': {
+                        'corrupted_holokeys': cost.get('corruptedHolokeys', 0),
+                        'credits': cost.get('credits', 0),
+                    },
+                    'stats': '\n'.join(stats) if stats else 'Нет данных',
+                    'description': item.get('description', ''),
+                    'image': item.get('image', '')
+                })
+            
+            return {
+                'inventory': inventory,
+                'expiry': data.get('expiry', 'Неизвестно'),
+                'seller': 'Эрго Гласт'
+            }
         return None
     
     @staticmethod
     async def get_cavalero() -> Optional[Dict]:
+        """Кавалеро - торговец на Заримане"""
+        data = await WarframeAPI.fetch_data("cavalero")
+        if data and data.get('inventory'):
+            inventory = []
+            for item in data.get('inventory', []):
+                cost = item.get('cost', {})
+                
+                stats = []
+                if 'stats' in item:
+                    for stat in item['stats']:
+                        if stat.get('positive', ''):
+                            stats.append(f"✅ {stat['positive']}")
+                        if stat.get('negative', ''):
+                            stats.append(f"❌ {stat['negative']}")
+                
+                inventory.append({
+                    'name': item.get('name', 'Неизвестно'),
+                    'type': item.get('type', ''),
+                    'cost': {
+                        'credits': cost.get('credits', 0),
+                        'evolve': cost.get('evolve', 0),
+                    },
+                    'stats': '\n'.join(stats) if stats else 'Нет данных',
+                    'description': item.get('description', ''),
+                    'image': item.get('image', '')
+                })
+            
+            return {
+                'inventory': inventory,
+                'expiry': data.get('expiry', 'Неизвестно'),
+                'seller': 'Кавалеро'
+            }
         return None
     
     @staticmethod
     async def get_eleonora() -> Optional[Dict]:
+        """Элеонора - торговец в Хёльвании"""
+        data = await WarframeAPI.fetch_data("eleonora")
+        if data and data.get('inventory'):
+            inventory = []
+            for item in data.get('inventory', []):
+                cost = item.get('cost', {})
+                
+                stats = []
+                if 'stats' in item:
+                    for stat in item['stats']:
+                        if stat.get('positive', ''):
+                            stats.append(f"✅ {stat['positive']}")
+                        if stat.get('negative', ''):
+                            stats.append(f"❌ {stat['negative']}")
+                
+                inventory.append({
+                    'name': item.get('name', 'Неизвестно'),
+                    'type': item.get('type', ''),
+                    'cost': {
+                        'lith_credits': cost.get('lithCredits', 0),
+                    },
+                    'stats': '\n'.join(stats) if stats else 'Нет данных',
+                    'description': item.get('description', ''),
+                    'image': item.get('image', '')
+                })
+            
+            return {
+                'inventory': inventory,
+                'expiry': data.get('expiry', 'Неизвестно'),
+                'seller': 'Элеонора'
+            }
         return None
     
     @staticmethod
@@ -568,6 +671,30 @@ def format_notification(data_type: str, data) -> str:
         
         return f"{icon} **Цикл Земли**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
     
+    elif data_type == 'venus_weather':
+        if not data:
+            return "🌡️ Данные о погоде на Венере недоступны"
+        
+        is_warm = data.get('is_warm', False)
+        time_left = data.get('time_left', 'Неизвестно')
+        
+        icon = "☀️" if is_warm else "❄️"
+        state_name = "Тепло" if is_warm else "Холодно"
+        
+        return f"{icon} **Погода на Венере**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
+    
+    elif data_type == 'deimos_cycle':
+        if not data:
+            return "🕷️ Данные о цикле Деймоса недоступны"
+        
+        is_vome = data.get('is_vome', False)
+        time_left = data.get('time_left', 'Неизвестно')
+        
+        icon = "🟢" if is_vome else "🔴"
+        state_name = "Воме" if is_vome else "Фасс"
+        
+        return f"{icon} **Цикл Деймоса**\n\nСостояние: {state_name}\n⏰ До смены: {time_left}"
+    
     elif data_type == 'duviri_mood':
         if not data:
             return "🎭 Данные о настроении в Дувири недоступны"
@@ -586,6 +713,88 @@ def format_notification(data_type: str, data) -> str:
         mood_emoji = mood_emojis.get(mood.lower(), '🎭')
         
         return f"{mood_emoji} **Настроение Дувири**\n\nСостояние: {mood}\n⏰ До смены: {time_left}"
+    
+    elif data_type == 'ergo_glast':
+        if not data or not data.get('inventory'):
+            return "🛒 Эрго Гласт сейчас не предлагает товаров"
+        
+        message = f"🛒 **{data.get('seller', 'Эрго Гласт')}**\n"
+        message += f"📍 **Реле**\n"
+        message += f"⏰ **Обновление:** {data.get('expiry', 'Неизвестно')}\n\n"
+        message += "**📦 Доступные товары:**\n\n"
+        
+        for item in data.get('inventory', [])[:5]:
+            item_name = item.get('name', 'Неизвестно')
+            cost = item.get('cost', {})
+            stats = item.get('stats', 'Нет данных')
+            
+            message += f"• **{item_name}**\n"
+            
+            if cost.get('corrupted_holokeys'):
+                message += f"  🗝️ {cost['corrupted_holokeys']} Испорченных голоключей\n"
+            if cost.get('credits'):
+                message += f"  💰 {cost['credits']} кредитов\n"
+            
+            if stats and stats != 'Нет данных':
+                message += f"  📊 {stats}\n"
+            
+            message += "\n"
+        
+        return message
+    
+    elif data_type == 'cavalero':
+        if not data or not data.get('inventory'):
+            return "🛒 Кавалеро сейчас не предлагает товаров"
+        
+        message = f"🛒 **{data.get('seller', 'Кавалеро')}**\n"
+        message += f"📍 **Зариман**\n"
+        message += f"⏰ **Обновление:** {data.get('expiry', 'Неизвестно')}\n\n"
+        message += "**📦 Доступные товары:**\n\n"
+        
+        for item in data.get('inventory', [])[:5]:
+            item_name = item.get('name', 'Неизвестно')
+            cost = item.get('cost', {})
+            stats = item.get('stats', 'Нет данных')
+            
+            message += f"• **{item_name}**\n"
+            
+            if cost.get('credits'):
+                message += f"  💰 {cost['credits']} кредитов\n"
+            if cost.get('evolve'):
+                message += f"  🔄 {cost['evolve']} эволюций\n"
+            
+            if stats and stats != 'Нет данных':
+                message += f"  📊 {stats}\n"
+            
+            message += "\n"
+        
+        return message
+    
+    elif data_type == 'eleonora':
+        if not data or not data.get('inventory'):
+            return "🛒 Элеонора сейчас не предлагает товаров"
+        
+        message = f"🛒 **{data.get('seller', 'Элеонора')}**\n"
+        message += f"📍 **Хёльвания**\n"
+        message += f"⏰ **Обновление:** {data.get('expiry', 'Неизвестно')}\n\n"
+        message += "**📦 Доступные товары:**\n\n"
+        
+        for item in data.get('inventory', [])[:5]:
+            item_name = item.get('name', 'Неизвестно')
+            cost = item.get('cost', {})
+            stats = item.get('stats', 'Нет данных')
+            
+            message += f"• **{item_name}**\n"
+            
+            if cost.get('lith_credits'):
+                message += f"  🟣 {cost['lith_credits']} кредитов заражённых личей\n"
+            
+            if stats and stats != 'Нет данных':
+                message += f"  📊 {stats}\n"
+            
+            message += "\n"
+        
+        return message
     
     elif data_type == 'nightwave':
         if not data:
