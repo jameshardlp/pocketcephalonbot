@@ -19,6 +19,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Флаг для контроля завершения
+shutdown_flag = False
+
+def signal_handler(signum, frame):
+    """Обработка сигналов для graceful shutdown"""
+    global shutdown_flag
+    logger.info(f"📡 Received signal {signum}, shutting down...")
+    shutdown_flag = True
+    sys.exit(0)
+
 def start_bot():
     """Запуск бота с повторными попытками"""
     max_retries = 5
@@ -47,11 +57,6 @@ def start_web():
         logger.error(f"❌ Web server error: {e}")
         raise
 
-def signal_handler(signum, frame):
-    """Обработка сигналов для graceful shutdown"""
-    logger.info(f"📡 Received signal {signum}, shutting down...")
-    sys.exit(0)
-
 if __name__ == "__main__":
     # Настройка обработчиков сигналов
     signal.signal(signal.SIGINT, signal_handler)
@@ -79,7 +84,8 @@ if __name__ == "__main__":
     
     # Ждем завершения
     try:
-        web_thread.join()
+        while not shutdown_flag:
+            time.sleep(1)
     except KeyboardInterrupt:
         logger.info("🛑 Shutting down...")
         sys.exit(0)
