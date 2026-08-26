@@ -33,11 +33,8 @@ class WarframeAPI:
                     'credits': item.get('credits', 0)
                 })
             
-            # Проверяем активность по наличию инвентаря или по времени
-            is_active = len(inventory) > 0
-            
             return {
-                'active': is_active,
+                'active': len(inventory) > 0,
                 'location': data.get('location', 'Неизвестно'),
                 'inventory': inventory,
                 'expiry': data.get('expiry', ''),
@@ -302,24 +299,36 @@ class WarframeAPI:
     @staticmethod
     async def get_steel_path() -> Optional[Dict]:
         """Стальной Путь - steelPath"""
-        data = await WarframeAPI.fetch_data("steelPath")
-        if data:
+        try:
+            data = await WarframeAPI.fetch_data("steelPath")
+            if not data:
+                return None
+            
             if not data.get('active', False):
                 return None
             
             current_reward = data.get('currentReward', {})
             
+            rotations = []
+            for reward in data.get('rotation', []):
+                rotations.append({
+                    'name': reward.get('name', 'Неизвестно'),
+                    'cost': reward.get('cost', 0)
+                })
+            
             return {
-                'active': data.get('active', False),
+                'active': True,
                 'current_reward': {
                     'name': current_reward.get('name', 'Неизвестно'),
-                    'description': current_reward.get('description', '')
+                    'cost': current_reward.get('cost', 0)
                 },
                 'remaining': data.get('remaining', ''),
                 'expiry': data.get('expiry', ''),
-                'rotation': data.get('rotation', '')
+                'rotations': rotations
             }
-        return None
+        except Exception as e:
+            print(f"Error in get_steel_path: {e}")
+            return None
     
     @staticmethod
     async def get_alerts() -> Optional[List[Dict]]:
@@ -449,11 +458,9 @@ def format_notification(data_type: str, data) -> str:
         character_name = data.get('character', "Baro Ki'Teer")
         message = f"🧛 **{character_name}**\n"
         
-        # Местоположение
         location = data.get('location', 'Неизвестно')
         message += f"📍 **Местоположение:** {location}\n"
         
-        # Время прибытия и убытия
         activation = data.get('activation', '')
         expiry = data.get('expiry', '')
         
@@ -462,7 +469,6 @@ def format_notification(data_type: str, data) -> str:
         if expiry:
             message += f"⏰ **Убудет:** {expiry}\n"
         
-        # Инвентарь
         inventory = data.get('inventory', [])
         if inventory:
             message += f"\n**🛍️ Инвентарь ({len(inventory)} товаров):**\n"
@@ -611,20 +617,30 @@ def format_notification(data_type: str, data) -> str:
             return "🗡️ Стальной Путь сейчас неактивен"
         
         message = "🗡️ **Стальной Путь**\n\n"
-        reward = data.get('current_reward', {})
         
-        if reward:
-            message += f"🎁 **Текущая награда:** {reward.get('name', 'Неизвестно')}\n"
-            if reward.get('description'):
-                message += f"📝 {reward.get('description')}\n"
+        reward = data.get('current_reward', {})
+        if reward and reward.get('name'):
+            message += f"🎁 **Текущая награда:** {reward.get('name')}"
+            if reward.get('cost'):
+                message += f" (Стоимость: {reward.get('cost')}💰)"
+            message += "\n"
         else:
-            message += "Текущая награда не определена\n"
+            message += "🎁 Награда не определена\n"
         
         if data.get('remaining'):
             message += f"⏰ **Осталось:** {data.get('remaining')}\n"
         
-        if data.get('rotation'):
-            message += f"🔄 **Ротация:** {data.get('rotation')}\n"
+        rotations = data.get('rotations', [])
+        if rotations:
+            message += "\n**🔄 Ротационные награды:**\n"
+            for reward in rotations[:8]:
+                message += f"• {reward.get('name')}"
+                if reward.get('cost'):
+                    message += f" (Стоимость: {reward.get('cost')}💰)"
+                message += "\n"
+            
+            if len(rotations) > 8:
+                message += f"\n... и еще {len(rotations) - 8} наград\n"
         
         return message
     
