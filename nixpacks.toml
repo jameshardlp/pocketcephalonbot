@@ -1,2 +1,76 @@
+# nixpacks.toml - расширенная конфигурация
+
 [phases.setup]
-nixPkgs = ["ffmpeg"]
+nixPkgs = [
+    "python311",
+    "python311Packages.pip",
+    "python311Packages.setuptools",
+    "python311Packages.wheel",
+    "gcc",
+    "libxml2",
+    "libxslt",
+    "libffi",
+    "openssl",
+    "sqlite",
+    "postgresql",
+    "curl",
+    "wget"
+]
+
+[phases.install]
+# Установка с оптимизацией кеша
+cmds = [
+    "pip install --upgrade pip setuptools wheel",
+    "pip install --no-cache-dir -r requirements.txt",
+    "python -c 'import nltk; nltk.download(\"punkt\")' 2>/dev/null || true"
+]
+
+[phases.start]
+# Основная команда запуска
+cmd = "python start.py"
+
+[metadata]
+name = "Pocket Cephalon - Warframe Bot"
+version = "2.0.0"
+description = "Telegram bot for Warframe with customizable notifications and widget"
+repository = "https://github.com/your-username/warframe-bot"
+
+# Health check для веб-сервера
+[healthcheck]
+path = "/api/health"
+port = 8000
+timeout = 10
+interval = 30
+
+# Переменные окружения по умолчанию
+[env]
+PYTHONUNBUFFERED = "1"
+PYTHONPATH = "/app"
+TZ = "UTC"
+WEB_PORT = "8000"
+RATE_LIMIT = "5"
+CHECK_INTERVAL = "30"
+LOG_LEVEL = "INFO"
+DEBUG = "False"
+
+# Настройки для разных типов сервисов
+[web]
+port = 8000
+cmd = "python -m uvicorn web.server:app --host 0.0.0.0 --port $PORT"
+
+[worker]
+cmd = "python bot.py"
+
+# Настройки для продакшена
+[production]
+env = {
+    LOG_LEVEL = "WARNING",
+    DEBUG = "False"
+}
+
+# Настройки для разработки
+[development]
+env = {
+    LOG_LEVEL = "DEBUG",
+    DEBUG = "True"
+}
