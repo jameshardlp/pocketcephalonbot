@@ -62,7 +62,7 @@ class WarframeBot:
             # Держим бота активным
             while True:
                 await asyncio.sleep(3600)
-                logger.info("💓 Bot heartbeat")
+                logger.debug("💓 Bot heartbeat")
             
         except asyncio.CancelledError:
             logger.info("🔄 Bot task cancelled")
@@ -76,7 +76,10 @@ class WarframeBot:
         """Остановка бота"""
         logger.info("🛑 Shutting down bot...")
         if self.scheduler:
-            self.scheduler.scheduler.shutdown()
+            try:
+                self.scheduler.scheduler.shutdown()
+            except Exception as e:
+                logger.error(f"Error shutting down scheduler: {e}")
         try:
             await self.application.updater.stop()
             await self.application.stop()
