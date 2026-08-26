@@ -22,6 +22,7 @@ class WarframeAPI:
     
     @staticmethod
     async def get_baro_trader() -> Optional[Dict]:
+        """Торговец из Бездны - voidTrader"""
         data = await WarframeAPI.fetch_data("voidTrader")
         if data:
             inventory = []
@@ -32,11 +33,15 @@ class WarframeAPI:
                     'credits': item.get('credits', 0)
                 })
             
+            # Проверяем активность по наличию инвентаря или по времени
+            is_active = len(inventory) > 0
+            
             return {
-                'active': len(inventory) > 0,
+                'active': is_active,
                 'location': data.get('location', 'Неизвестно'),
                 'inventory': inventory,
                 'expiry': data.get('expiry', ''),
+                'activation': data.get('activation', ''),
                 'character': data.get('character', "Baro Ki'Teer")
             }
         return None
@@ -170,15 +175,10 @@ class WarframeAPI:
     async def get_arbitration() -> Optional[Dict]:
         """
         Получение данных об Арбитраже.
-        Основной источник - парсинг browse.wf (более надежный).
-        Официальное API используется как резервный.
+        Сначала пытается получить из официального API.
+        Если API не даёт данных, использует парсинг browse.wf.
         """
-        # 1. Сначала пробуем browse.wf (основной источник)
-        browse_data = await WarframeAPI.get_arbitration_from_browse()
-        if browse_data:
-            return browse_data
-        
-        # 2. Если browse.wf не дал данных, пробуем официальное API
+        # 1. Сначала пробуем официальное API
         data = await WarframeAPI.fetch_data("arbitration")
         if data:
             if not data.get('expired', True):
@@ -193,6 +193,11 @@ class WarframeAPI:
                         'sharkwing': data.get('sharkwing', False),
                         'source': 'api'
                     }
+        
+        # 2. Если API не дал данных, пробуем browse.wf
+        browse_data = await WarframeAPI.get_arbitration_from_browse()
+        if browse_data:
+            return browse_data
         
         return None
 
@@ -209,7 +214,6 @@ class WarframeAPI:
                         return None
                     html = await response.text()
                     
-                    # Ищем блок "Next Occurrence"
                     next_occurrence_match = re.search(
                         r'Next Occurrence\s*</?strong>?\s*</?h2>?\s*<ul>(.*?)</ul>',
                         html,
@@ -235,7 +239,6 @@ class WarframeAPI:
                     if not clean_lines:
                         return None
                     
-                    # Берем первую миссию (она самая ближайшая)
                     first_mission = clean_lines[0]
                     parts = first_mission.split(' | ', 1)
                     if len(parts) != 2:
@@ -243,7 +246,6 @@ class WarframeAPI:
                     
                     date_time_str, mission_details = parts[0], parts[1]
                     
-                    # Парсим детали миссии
                     mission_parts = mission_details.split(' @ ')
                     if len(mission_parts) != 2:
                         return None
@@ -251,7 +253,6 @@ class WarframeAPI:
                     left_part = mission_parts[0].strip()
                     right_part = mission_parts[1].strip()
                     
-                    # Извлекаем узел, планету и бонус
                     node_planet_bonus = right_part.split(' (', 1)
                     node_planet = node_planet_bonus[0].strip()
                     bonus = f"({node_planet_bonus[1]}" if len(node_planet_bonus) > 1 else ''
@@ -300,20 +301,29 @@ class WarframeAPI:
     
     @staticmethod
     async def get_steel_path() -> Optional[Dict]:
+        """Стальной Путь - steelPath"""
         data = await WarframeAPI.fetch_data("steelPath")
         if data:
             if not data.get('active', False):
                 return None
+            
+            current_reward = data.get('currentReward', {})
+            
             return {
                 'active': data.get('active', False),
-                'current_reward': data.get('currentReward', {}),
+                'current_reward': {
+                    'name': current_reward.get('name', 'Неизвестно'),
+                    'description': current_reward.get('description', '')
+                },
                 'remaining': data.get('remaining', ''),
-                'expiry': data.get('expiry', '')
+                'expiry': data.get('expiry', ''),
+                'rotation': data.get('rotation', '')
             }
         return None
     
     @staticmethod
     async def get_alerts() -> Optional[List[Dict]]:
+        """Тревоги - alerts"""
         data = await WarframeAPI.fetch_data("alerts")
         if data:
             alerts = []
@@ -325,10 +335,12 @@ class WarframeAPI:
                         if expiry_time > datetime.utcnow():
                             mission = alert.get('mission', {})
                             reward = mission.get('reward', {})
+                            
                             counted_items = []
                             if 'countedItems' in reward:
                                 for item in reward['countedItems']:
                                     counted_items.append(f"{item.get('count', '')}x {item.get('type', '')}")
+                            
                             alerts.append({
                                 'id': alert.get('id', ''),
                                 'node': mission.get('node', 'Неизвестно'),
@@ -336,10 +348,13 @@ class WarframeAPI:
                                 'faction': mission.get('faction', 'Неизвестно'),
                                 'reward_items': ', '.join(counted_items) if counted_items else 'Нет данных',
                                 'credits': reward.get('credits', 0),
-                                'expiry': alert.get('expiry', '')
+                                'expiry': alert.get('expiry', ''),
+                                'eta': alert.get('eta', '')
                             })
                     except:
                         pass
+            
+            alerts.sort(key=lambda x: x.get('expiry', ''))
             return alerts if alerts else None
         return []
     
@@ -428,20 +443,39 @@ def format_notification(data_type: str, data) -> str:
     """Форматирование уведомлений для отправки в Telegram"""
     
     if data_type == 'baro':
-        if not data or not data.get('active'):
+        if not data:
             return "🧛 Торговец из Бездны сейчас неактивен"
         
         character_name = data.get('character', "Baro Ki'Teer")
         message = f"🧛 **{character_name}**\n"
-        message += f"📍 **Местоположение:** {data.get('location', 'Неизвестно')}\n"
-        message += f"⏰ **Доступен до:** {data.get('expiry', 'Неизвестно')}\n\n"
-        message += "**🛍️ Инвентарь:**\n"
         
-        for item in data.get('inventory', [])[:10]:
-            item_name = item.get('item', 'Неизвестно')
-            ducats = item.get('ducats', 0)
-            credits = item.get('credits', 0)
-            message += f"• {item_name} - {ducats}🪙 {credits}💰\n"
+        # Местоположение
+        location = data.get('location', 'Неизвестно')
+        message += f"📍 **Местоположение:** {location}\n"
+        
+        # Время прибытия и убытия
+        activation = data.get('activation', '')
+        expiry = data.get('expiry', '')
+        
+        if activation:
+            message += f"🕐 **Прибыл:** {activation}\n"
+        if expiry:
+            message += f"⏰ **Убудет:** {expiry}\n"
+        
+        # Инвентарь
+        inventory = data.get('inventory', [])
+        if inventory:
+            message += f"\n**🛍️ Инвентарь ({len(inventory)} товаров):**\n"
+            for item in inventory[:10]:
+                item_name = item.get('item', 'Неизвестно')
+                ducats = item.get('ducats', 0)
+                credits = item.get('credits', 0)
+                message += f"• {item_name} - {ducats}🪙 {credits}💰\n"
+            
+            if len(inventory) > 10:
+                message += f"\n... и еще {len(inventory) - 10} товаров\n"
+        else:
+            message += "\n🛍️ Инвентарь пуст (торговец скоро прибудет или убыл)\n"
         
         return message
     
@@ -578,11 +612,19 @@ def format_notification(data_type: str, data) -> str:
         
         message = "🗡️ **Стальной Путь**\n\n"
         reward = data.get('current_reward', {})
+        
         if reward:
             message += f"🎁 **Текущая награда:** {reward.get('name', 'Неизвестно')}\n"
-            message += f"⏰ **Доступно:** {data.get('remaining', 'Неизвестно')}\n"
+            if reward.get('description'):
+                message += f"📝 {reward.get('description')}\n"
         else:
             message += "Текущая награда не определена\n"
+        
+        if data.get('remaining'):
+            message += f"⏰ **Осталось:** {data.get('remaining')}\n"
+        
+        if data.get('rotation'):
+            message += f"🔄 **Ротация:** {data.get('rotation')}\n"
         
         return message
     
@@ -593,19 +635,26 @@ def format_notification(data_type: str, data) -> str:
         message = "🚨 **Активные тревоги**\n\n"
         
         for alert in data[:10]:
-            message += f"📍 **{alert.get('node', 'Неизвестно')}**\n"
-            message += f"🎯 {alert.get('type', 'Неизвестно')}"
-            if alert.get('faction'):
-                message += f" - {alert.get('faction', '')}"
-            message += "\n"
-            
+            node = alert.get('node', 'Неизвестно')
+            mission_type = alert.get('type', 'Неизвестно')
+            faction = alert.get('faction', '')
             reward_items = alert.get('reward_items', '')
             credits = alert.get('credits', 0)
+            
+            message += f"📍 **{node}**\n"
+            message += f"🎯 {mission_type}"
+            if faction:
+                message += f" - {faction}"
+            message += "\n"
+            
             if reward_items and reward_items != 'Нет данных':
                 message += f"🎁 Награда: {reward_items}"
                 if credits > 0:
                     message += f" (+{credits}💰)"
                 message += "\n"
+            
+            if alert.get('eta'):
+                message += f"⏰ {alert['eta']}\n"
             
             message += "\n"
         
