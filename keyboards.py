@@ -1,6 +1,7 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 def get_main_menu():
+    """Главное меню бота"""
     keyboard = [
         [InlineKeyboardButton("⚙️ Настройки", callback_data='settings')],
         [InlineKeyboardButton("📊 Получить информацию", callback_data='get_info')],
@@ -10,6 +11,7 @@ def get_main_menu():
     return InlineKeyboardMarkup(keyboard)
 
 def get_settings_menu():
+    """Меню настроек - категории"""
     keyboard = [
         [InlineKeyboardButton("⚙️ Основные уведомления", callback_data='settings_main')],
         [InlineKeyboardButton("🌍 Циклы и погода", callback_data='settings_cycles')],
@@ -19,6 +21,10 @@ def get_settings_menu():
     return InlineKeyboardMarkup(keyboard)
 
 def get_status_buttons(user_settings, category='main'):
+    """
+    Кнопки для включения/выключения уведомлений
+    category: 'main', 'cycles', 'traders'
+    """
     if category == 'main':
         statuses = {
             'notify_baro': '🧛 Торговец из Бездны',
@@ -49,6 +55,7 @@ def get_status_buttons(user_settings, category='main'):
     
     keyboard = []
     for key, name in statuses.items():
+        # Получаем статус из словаря, по умолчанию True
         status = user_settings.get(key, True)
         status_text = "✅" if status else "❌"
         keyboard.append([InlineKeyboardButton(
@@ -60,6 +67,7 @@ def get_status_buttons(user_settings, category='main'):
     return InlineKeyboardMarkup(keyboard)
 
 def get_info_menu():
+    """Меню получения информации"""
     keyboard = [
         [InlineKeyboardButton("🧛 Торговец из Бездны", callback_data='info_baro')],
         [InlineKeyboardButton("💠 Разрывы Бездны", callback_data='info_fissures')],
@@ -77,6 +85,7 @@ def get_info_menu():
     return InlineKeyboardMarkup(keyboard)
 
 def get_cycle_menu():
+    """Меню выбора циклов"""
     keyboard = [
         [InlineKeyboardButton("🌍 Цикл Земли", callback_data='info_earth_cycle')],
         [InlineKeyboardButton("🌡️ Погода Венеры", callback_data='info_venus_weather')],
@@ -87,6 +96,7 @@ def get_cycle_menu():
     return InlineKeyboardMarkup(keyboard)
 
 def get_trader_menu():
+    """Меню выбора торговцев"""
     keyboard = [
         [InlineKeyboardButton("🛒 Эрго Гласт (Реле)", callback_data='info_ergo_glast')],
         [InlineKeyboardButton("🛒 Кавалеро (Зариман)", callback_data='info_cavalero')],
@@ -97,8 +107,65 @@ def get_trader_menu():
     return InlineKeyboardMarkup(keyboard)
 
 def get_widget_menu():
+    """Меню виджета"""
     keyboard = [
         [InlineKeyboardButton("📱 Получить ссылку на виджет", callback_data='get_widget')],
+        [InlineKeyboardButton("🔙 Назад", callback_data='back_to_main')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_confirmation_menu(action: str, item_name: str):
+    """
+    Меню подтверждения действия
+    action: 'reset_settings', 'clear_history' и т.д.
+    """
+    keyboard = [
+        [InlineKeyboardButton("✅ Да", callback_data=f'confirm_{action}')],
+        [InlineKeyboardButton("❌ Нет", callback_data='back_to_settings')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_paginated_menu(items: list, page: int = 0, items_per_page: int = 5, prefix: str = 'item'):
+    """
+    Создание пагинированного меню для списка элементов
+    """
+    if not items:
+        return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data='back_to_main')]])
+    
+    total_pages = (len(items) + items_per_page - 1) // items_per_page
+    start_idx = page * items_per_page
+    end_idx = min(start_idx + items_per_page, len(items))
+    
+    keyboard = []
+    for i in range(start_idx, end_idx):
+        item = items[i]
+        if isinstance(item, dict):
+            name = item.get('name', str(i))
+            callback = f"{prefix}_{item.get('id', i)}"
+        else:
+            name = str(item)
+            callback = f"{prefix}_{i}"
+        keyboard.append([InlineKeyboardButton(name, callback_data=callback)])
+    
+    # Кнопки навигации
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton("◀️", callback_data=f'{prefix}_page_{page-1}'))
+    nav_buttons.append(InlineKeyboardButton(f"{page+1}/{total_pages}", callback_data='ignore'))
+    if page < total_pages - 1:
+        nav_buttons.append(InlineKeyboardButton("▶️", callback_data=f'{prefix}_page_{page+1}'))
+    
+    if nav_buttons:
+        keyboard.append(nav_buttons)
+    
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data='back_to_main')])
+    return InlineKeyboardMarkup(keyboard)
+
+def get_error_menu(error_message: str):
+    """
+    Меню для отображения ошибки с кнопкой возврата
+    """
+    keyboard = [
         [InlineKeyboardButton("🔙 Назад", callback_data='back_to_main')]
     ]
     return InlineKeyboardMarkup(keyboard)
