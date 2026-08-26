@@ -3,6 +3,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime
 import asyncio
 import logging
+import random
 
 from config import CHECK_INTERVAL
 from database import add_to_queue, save_history
@@ -17,19 +18,28 @@ class NotificationScheduler:
         self.last_data = {}
         self.rate_limit = 5
         self.last_send_time = {}
+        self.user_cache = {}  # Кеш пользователей для уменьшения нагрузки на БД
+        self.cache_time = {}
+        self.cache_ttl = 60  # Обновлять кеш каждые 60 секунд
         
     def setup(self):
+        # Добавляем небольшую случайную задержку при старте
+        initial_delay = random.randint(5, 15)
+        
         self.scheduler.add_job(
             self.check_all,
             trigger=IntervalTrigger(seconds=CHECK_INTERVAL),
             id='check_all',
-            replace_existing=True
+            replace_existing=True,
+            misfire_grace_time=30
         )
         self.scheduler.start()
-        logger.info("Scheduler started")
+        logger.info(f"Scheduler started (initial delay: {initial_delay}s, interval: {CHECK_INTERVAL}s)")
     
     async def check_all(self):
+        """Основная проверка всех событий"""
         try:
+            logger.debug("Starting check_all cycle")
             tasks = [
                 self.check_baro(),
                 self.check_fissures(),
@@ -40,19 +50,58 @@ class NotificationScheduler:
                 self.check_steel_path(),
                 self.check_alerts(),
                 self.check_cycles(),
-                self.check_traders(),
                 self.check_nightwave()
             ]
-            await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Добавляем таймаут для всех задач
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Логируем ошибки отдельных задач
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.error(f"Task {i} failed: {result}")
+                    
         except Exception as e:
             logger.error(f"Error in check_all: {e}")
+    
+    async def get_users_with_setting(self, setting_name):
+        """Получение пользователей с включенным уведомлением (с кешированием)"""
+        from database import Session, User
+        
+        cache_key = setting_name
+        current_time = datetime.utcnow().timestamp()
+        
+        # Проверяем кеш
+        if cache_key in self.user_cache and cache_key in self.cache_time:
+            if current_time - self.cache_time[cache_key] < self.cache_ttl:
+                return self.user_cache[cache_key]
+        
+        # Получаем из БД
+        session = Session()
+        try:
+            users = session.query(User).filter(getattr(User, setting_name) == True).all()
+            user_ids = [user.telegram_id for user in users]
+            
+            # Обновляем кеш
+            self.user_cache[cache_key] = user_ids
+            self.cache_time[cache_key] = current_time
+            
+            return user_ids
+        except Exception as e:
+            logger.error(f"Error getting users for {setting_name}: {e}")
+            return []
+        finally:
+            session.close()
     
     async def check_baro(self):
         try:
             data = await WarframeAPI.get_baro_trader()
             if data and data.get('active') and data.get('inventory'):
                 key = 'baro_hash'
-                baro_hash = hash(str(data.get('inventory', [])))
+                baro_hash = hash(str(sorted(
+                    [(item.get('item', ''), item.get('ducats', 0), item.get('credits', 0)) 
+                     for item in data.get('inventory', [])]
+                )))
                 if key not in self.last_data or self.last_data[key] != baro_hash:
                     self.last_data[key] = baro_hash
                     message = format_notification('baro', data)
@@ -66,7 +115,7 @@ class NotificationScheduler:
             data = await WarframeAPI.get_fissures()
             if data:
                 key = 'fissures_hash'
-                fissures_hash = hash(str([(f['id'], f['expiry']) for f in data]))
+                fissures_hash = hash(str(sorted([(f['id'], f['expiry']) for f in data])))
                 if key not in self.last_data or self.last_data[key] != fissures_hash:
                     self.last_data[key] = fissures_hash
                     message = format_notification('fissures', data)
@@ -80,12 +129,17 @@ class NotificationScheduler:
             data = await WarframeAPI.get_invasions()
             if data:
                 key = 'invasions_hash'
-                invasions_hash = hash(str([(inv['id'], inv['completion']) for inv in data if inv.get('completion', 0) < 100]))
-                if key not in self.last_data or self.last_data[key] != invasions_hash:
-                    self.last_data[key] = invasions_hash
-                    message = format_notification('invasions', data)
-                    if message:
-                        await self.notify_all('notify_invasions', message, 'invasions')
+                active_invasions = [inv for inv in data if inv.get('completion', 0) < 100]
+                if active_invasions:
+                    invasions_hash = hash(str(sorted([
+                        (inv['id'], inv['completion']) 
+                        for inv in active_invasions
+                    ])))
+                    if key not in self.last_data or self.last_data[key] != invasions_hash:
+                        self.last_data[key] = invasions_hash
+                        message = format_notification('invasions', data)
+                        if message:
+                            await self.notify_all('notify_invasions', message, 'invasions')
         except Exception as e:
             logger.error(f"Error in check_invasions: {e}")
     
@@ -94,7 +148,10 @@ class NotificationScheduler:
             data = await WarframeAPI.get_sortie()
             if data:
                 key = 'sortie_hash'
-                sortie_hash = hash(str(data.get('variants', [])))
+                sortie_hash = hash(str(sorted([
+                    (v.get('node', ''), v.get('mission_type', '')) 
+                    for v in data.get('variants', [])
+                ])))
                 if key not in self.last_data or self.last_data[key] != sortie_hash:
                     self.last_data[key] = sortie_hash
                     message = format_notification('sortie', data)
@@ -108,7 +165,12 @@ class NotificationScheduler:
             data = await WarframeAPI.get_arbitration()
             if data:
                 key = 'arbitration_hash'
-                arb_hash = hash(str(data))
+                arb_hash = hash(str({
+                    'node': data.get('node', ''),
+                    'type': data.get('type', ''),
+                    'enemy': data.get('enemy', ''),
+                    'source': data.get('source', '')
+                }))
                 if key not in self.last_data or self.last_data[key] != arb_hash:
                     self.last_data[key] = arb_hash
                     message = format_notification('arbitration', data)
@@ -122,7 +184,10 @@ class NotificationScheduler:
             data = await WarframeAPI.get_archon_hunt()
             if data:
                 key = 'archon_hash'
-                archon_hash = hash(str(data.get('missions', [])))
+                archon_hash = hash(str(sorted([
+                    (m.get('node', ''), m.get('type', '')) 
+                    for m in data.get('missions', [])
+                ])))
                 if key not in self.last_data or self.last_data[key] != archon_hash:
                     self.last_data[key] = archon_hash
                     message = format_notification('archon', data)
@@ -136,7 +201,11 @@ class NotificationScheduler:
             data = await WarframeAPI.get_steel_path()
             if data and data.get('active'):
                 key = 'steel_path_hash'
-                sp_hash = hash(str(data.get('current_reward', {})))
+                reward = data.get('current_reward', {})
+                sp_hash = hash(str({
+                    'reward_name': reward.get('name', ''),
+                    'remaining': data.get('remaining', '')
+                }))
                 if key not in self.last_data or self.last_data[key] != sp_hash:
                     self.last_data[key] = sp_hash
                     message = format_notification('steel_path', data)
@@ -150,7 +219,7 @@ class NotificationScheduler:
             data = await WarframeAPI.get_alerts()
             if data:
                 key = 'alerts_hash'
-                alerts_hash = hash(str([(a['id'], a['expiry']) for a in data]))
+                alerts_hash = hash(str(sorted([(a['id'], a['expiry']) for a in data])))
                 if key not in self.last_data or self.last_data[key] != alerts_hash:
                     self.last_data[key] = alerts_hash
                     message = format_notification('alerts', data)
@@ -216,55 +285,15 @@ class NotificationScheduler:
         except Exception as e:
             logger.error(f"Error in check_duviri_mood: {e}")
     
-    async def check_traders(self):
-        # Эрго Гласт
-        try:
-            ergo = await WarframeAPI.get_ergo_glast()
-            if ergo and ergo.get('inventory'):
-                key = 'ergo_hash'
-                ergo_hash = hash(str(ergo.get('inventory', [])))
-                if key not in self.last_data or self.last_data[key] != ergo_hash:
-                    self.last_data[key] = ergo_hash
-                    message = format_notification('ergo_glast', ergo)
-                    if message:
-                        await self.notify_all('notify_ergo_glast', message, 'ergo_glast')
-        except Exception as e:
-            logger.error(f"Error in check_ergo_glast: {e}")
-        
-        # Кавалеро
-        try:
-            cavalero = await WarframeAPI.get_cavalero()
-            if cavalero and cavalero.get('inventory'):
-                key = 'cavalero_hash'
-                cavalero_hash = hash(str(cavalero.get('inventory', [])))
-                if key not in self.last_data or self.last_data[key] != cavalero_hash:
-                    self.last_data[key] = cavalero_hash
-                    message = format_notification('cavalero', cavalero)
-                    if message:
-                        await self.notify_all('notify_cavalero', message, 'cavalero')
-        except Exception as e:
-            logger.error(f"Error in check_cavalero: {e}")
-        
-        # Элеонора
-        try:
-            eleonora = await WarframeAPI.get_eleonora()
-            if eleonora and eleonora.get('inventory'):
-                key = 'eleonora_hash'
-                eleonora_hash = hash(str(eleonora.get('inventory', [])))
-                if key not in self.last_data or self.last_data[key] != eleonora_hash:
-                    self.last_data[key] = eleonora_hash
-                    message = format_notification('eleonora', eleonora)
-                    if message:
-                        await self.notify_all('notify_eleonora', message, 'eleonora')
-        except Exception as e:
-            logger.error(f"Error in check_eleonora: {e}")
-    
     async def check_nightwave(self):
         try:
             data = await WarframeAPI.get_nightwave()
             if data:
                 key = 'nightwave_hash'
-                nightwave_hash = hash(str(data.get('offers', [])))
+                nightwave_hash = hash(str(sorted([
+                    (o.get('name', ''), o.get('cost', {}).get('nightwave_credits', 0))
+                    for o in data.get('offers', [])
+                ])))
                 if key not in self.last_data or self.last_data[key] != nightwave_hash:
                     self.last_data[key] = nightwave_hash
                     message = format_notification('nightwave', data)
@@ -274,26 +303,39 @@ class NotificationScheduler:
             logger.error(f"Error in check_nightwave: {e}")
     
     async def notify_all(self, setting_name, message, notification_type):
-        from database import Session, User
-        session = Session()
+        """Отправка уведомлений всем пользователям с включенным типом"""
         try:
-            users = session.query(User).filter(getattr(User, setting_name) == True).all()
-            session.close()
+            user_ids = await self.get_users_with_setting(setting_name)
             
-            for user in users:
-                await self.send_notification(user.telegram_id, message, notification_type)
+            if not user_ids:
+                logger.debug(f"No users for {setting_name}")
+                return
+            
+            logger.info(f"Sending {notification_type} to {len(user_ids)} users")
+            
+            # Отправляем с ограничением скорости
+            for i, user_id in enumerate(user_ids):
+                # Добавляем небольшую задержку между пользователями
+                if i > 0:
+                    await asyncio.sleep(0.1)
+                
+                await self.send_notification(user_id, message, notification_type)
+                
         except Exception as e:
-            logger.error(f"Error in notify_all: {e}")
-            session.close()
+            logger.error(f"Error in notify_all for {setting_name}: {e}")
     
     async def send_notification(self, telegram_id, message, notification_type):
+        """Отправка одного уведомления с rate limiting"""
         now = datetime.utcnow()
         last_send = self.last_send_time.get(telegram_id)
         
+        # Проверяем rate limit
         if last_send:
             time_diff = (now - last_send).total_seconds()
             if time_diff < self.rate_limit:
+                # Ставим в очередь
                 add_to_queue(telegram_id, notification_type, message)
+                logger.debug(f"Rate limited {telegram_id}, queued {notification_type}")
                 return
         
         try:
@@ -304,7 +346,9 @@ class NotificationScheduler:
             )
             self.last_send_time[telegram_id] = now
             save_history(telegram_id, notification_type, message)
-            logger.info(f"Sent {notification_type} notification to {telegram_id}")
+            logger.info(f"Sent {notification_type} to {telegram_id}")
+            
         except Exception as e:
-            logger.error(f"Error sending notification to {telegram_id}: {e}")
+            logger.error(f"Error sending to {telegram_id}: {e}")
+            # При ошибке добавляем в очередь для повторной попытки
             add_to_queue(telegram_id, notification_type, message)
