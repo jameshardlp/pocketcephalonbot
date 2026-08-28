@@ -2,6 +2,7 @@ import aiohttp
 import asyncio
 import json
 import re
+import hashlib
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -298,85 +299,40 @@ class WarframeAPI:
     
     @staticmethod
     async def get_steel_path() -> Optional[Dict]:
-        """Стальной Путь - Тревоги (Incursions)"""
+        """Стальной Путь - получает информацию о текущей награде, ротации и времени."""
         try:
             data = await WarframeAPI.fetch_data("steelPath")
             if not data:
                 return None
-            
+
             if not data.get('active', False):
-                return None
+                return {"active": False, "message": "Режим Стального Пути в данный момент неактивен."}
+
+            current_reward = data.get('currentReward', {})
+            rotations = data.get('rotation', [])
             
-            incursion_list = []
-            
-            # Пробуем получить через steelPathIncursions
-            incursion_data = await WarframeAPI.fetch_data("steelPathIncursions")
-            if incursion_data:
-                for incursion in incursion_data:
-                    expiry = incursion.get('expiry', '')
-                    if expiry:
-                        try:
-                            expiry_time = datetime.fromisoformat(expiry.replace('Z', '+00:00'))
-                            if expiry_time > datetime.utcnow():
-                                mission = incursion.get('mission', {})
-                                reward = incursion.get('reward', {})
-                                
-                                reward_name = reward.get('asString', '')
-                                if not reward_name:
-                                    counted_items = reward.get('countedItems', [])
-                                    if counted_items:
-                                        reward_name = ', '.join([item.get('type', '') for item in counted_items])
-                                
-                                incursion_list.append({
-                                    'node': mission.get('node', 'Неизвестно'),
-                                    'type': mission.get('type', 'Неизвестно'),
-                                    'faction': mission.get('faction', 'Неизвестно'),
-                                    'reward': reward_name if reward_name else 'Нет данных',
-                                    'credits': reward.get('credits', 0),
-                                    'expiry': expiry
-                                })
-                        except Exception as e:
-                            print(f"Error parsing incursion: {e}")
-                            continue
-            
-            # Если нет, пробуем через steelPath/incursions
-            if not incursion_list:
-                alt_data = await WarframeAPI.fetch_data("steelPath/incursions")
-                if alt_data:
-                    for incursion in alt_data:
-                        expiry = incursion.get('expiry', '')
-                        if expiry:
-                            try:
-                                expiry_time = datetime.fromisoformat(expiry.replace('Z', '+00:00'))
-                                if expiry_time > datetime.utcnow():
-                                    mission = incursion.get('mission', {})
-                                    reward = incursion.get('reward', {})
-                                    
-                                    reward_name = reward.get('asString', '')
-                                    if not reward_name:
-                                        counted_items = reward.get('countedItems', [])
-                                        if counted_items:
-                                            reward_name = ', '.join([item.get('type', '') for item in counted_items])
-                                    
-                                    incursion_list.append({
-                                        'node': mission.get('node', 'Неизвестно'),
-                                        'type': mission.get('type', 'Неизвестно'),
-                                        'faction': mission.get('faction', 'Неизвестно'),
-                                        'reward': reward_name if reward_name else 'Нет данных',
-                                        'credits': reward.get('credits', 0),
-                                        'expiry': expiry
-                                    })
-                            except:
-                                pass
-            
-            return {
-                'active': True,
-                'has_incursions': len(incursion_list) > 0,
-                'incursions': incursion_list,
-                'remaining': data.get('remaining', ''),
-                'expiry': data.get('expiry', '')
+            result = {
+                "active": True,
+                "current_reward": {
+                    "name": current_reward.get('name', 'Неизвестно'),
+                    "cost": current_reward.get('cost', 0)
+                },
+                "remaining": data.get('remaining', 'Неизвестно'),
+                "expiry": data.get('expiry', 'Неизвестно'),
+                "rotations": rotations,
+                "incursions": data.get('incursions', {})
             }
             
+            # Вычисляем хэш для отслеживания изменений
+            hash_string = json.dumps({
+                'reward': current_reward.get('name'),
+                'remaining': data.get('remaining'),
+                'rotations': [r.get('name') for r in rotations[:5]]
+            }, sort_keys=True)
+            
+            result['hash'] = hashlib.md5(hash_string.encode()).hexdigest()
+            
+            return result
         except Exception as e:
             print(f"Error in get_steel_path: {e}")
             return None
@@ -665,41 +621,41 @@ def format_notification(data_type: str, data) -> str:
     
     elif data_type == 'steel_path':
         if not data:
-            return "🗡️ Стальной Путь сейчас неактивен"
+            return "🗡️ Стальной Путь: данные не получены."
         
-        if not data.get('has_incursions', False):
-            return "🗡️ **Стальной Путь**\n\nАктивных тревог нет. Проверьте позже."
+        if not data.get('active', False):
+            return f"🗡️ **Стальной Путь**\n\n{data.get('message', 'Режим неактивен.')}"
+
+        message = "🗡️ **Стальной Путь**\n\n"
         
-        message = "🗡️ **Стальной Путь — Тревоги**\n\n"
-        
-        incursions = data.get('incursions', [])
-        if incursions:
-            for incursion in incursions[:10]:
-                node = incursion.get('node', 'Неизвестно')
-                mission_type = incursion.get('type', 'Неизвестно')
-                faction = incursion.get('faction', '')
-                reward = incursion.get('reward', 'Нет данных')
-                credits = incursion.get('credits', 0)
-                
-                message += f"📍 **{node}**\n"
-                message += f"🎯 {mission_type}"
-                if faction:
-                    message += f" - {faction}"
-                message += "\n"
-                
-                if reward and reward != 'Нет данных':
-                    message += f"🎁 Награда: {reward}"
-                    if credits > 0:
-                        message += f" (+{credits}💰)"
-                    message += "\n"
-                
-                message += "\n"
+        reward = data.get('current_reward', {})
+        if reward.get('name'):
+            message += f"🎁 **Текущая награда:** {reward.get('name')}"
+            if reward.get('cost'):
+                message += f" (Стоимость: {reward.get('cost')}💰)"
+            message += "\n"
         else:
-            message += "❌ Нет активных тревог\n"
+            message += "🎁 Награда не определена.\n"
         
         if data.get('remaining'):
-            message += f"⏰ **До смены:** {data.get('remaining')}\n"
+            message += f"⏰ **Осталось:** {data.get('remaining')}\n"
         
+        rotations = data.get('rotations', [])
+        if rotations:
+            message += "\n**🔄 Ротационные награды:**\n"
+            for reward_item in rotations[:8]:
+                message += f"• {reward_item.get('name', 'Неизвестно')}"
+                if reward_item.get('cost'):
+                    message += f" (Стоимость: {reward_item.get('cost')}💰)"
+                message += "\n"
+            
+            if len(rotations) > 8:
+                message += f"\n... и еще {len(rotations) - 8} наград в ротации.\n"
+        
+        incursions = data.get('incursions', {})
+        if incursions and incursions.get('activation'):
+            message += f"\n📅 **Ежедневные инкурсии:** Доступны до {incursions.get('expiry', '').replace('T', ' ').replace('Z', ' UTC')}"
+
         return message
     
     elif data_type == 'alerts':
