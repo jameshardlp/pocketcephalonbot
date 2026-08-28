@@ -18,12 +18,11 @@ class NotificationScheduler:
         self.last_data = {}
         self.rate_limit = 5
         self.last_send_time = {}
-        self.user_cache = {}  # Кеш пользователей для уменьшения нагрузки на БД
+        self.user_cache = {}
         self.cache_time = {}
-        self.cache_ttl = 60  # Обновлять кеш каждые 60 секунд
+        self.cache_ttl = 60
         
     def setup(self):
-        # Добавляем небольшую случайную задержку при старте
         initial_delay = random.randint(5, 15)
         
         self.scheduler.add_job(
@@ -37,7 +36,6 @@ class NotificationScheduler:
         logger.info(f"Scheduler started (initial delay: {initial_delay}s, interval: {CHECK_INTERVAL}s)")
     
     async def check_all(self):
-        """Основная проверка всех событий"""
         try:
             logger.debug("Starting check_all cycle")
             tasks = [
@@ -53,10 +51,8 @@ class NotificationScheduler:
                 self.check_nightwave()
             ]
             
-            # Добавляем таймаут для всех задач
             results = await asyncio.gather(*tasks, return_exceptions=True)
             
-            # Логируем ошибки отдельных задач
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     logger.error(f"Task {i} failed: {result}")
@@ -65,24 +61,20 @@ class NotificationScheduler:
             logger.error(f"Error in check_all: {e}")
     
     async def get_users_with_setting(self, setting_name):
-        """Получение пользователей с включенным уведомлением (с кешированием)"""
         from database import Session, User
         
         cache_key = setting_name
         current_time = datetime.utcnow().timestamp()
         
-        # Проверяем кеш
         if cache_key in self.user_cache and cache_key in self.cache_time:
             if current_time - self.cache_time[cache_key] < self.cache_ttl:
                 return self.user_cache[cache_key]
         
-        # Получаем из БД
         session = Session()
         try:
             users = session.query(User).filter(getattr(User, setting_name) == True).all()
             user_ids = [user.telegram_id for user in users]
             
-            # Обновляем кеш
             self.user_cache[cache_key] = user_ids
             self.cache_time[cache_key] = current_time
             
@@ -199,18 +191,16 @@ class NotificationScheduler:
     async def check_steel_path(self):
         try:
             data = await WarframeAPI.get_steel_path()
-            if data and data.get('active'):
+            if data and data.get('active', False):
                 key = 'steel_path_hash'
-                reward = data.get('current_reward', {})
-                sp_hash = hash(str({
-                    'reward_name': reward.get('name', ''),
-                    'remaining': data.get('remaining', '')
-                }))
-                if key not in self.last_data or self.last_data[key] != sp_hash:
-                    self.last_data[key] = sp_hash
+                current_hash = data.get('hash')
+                
+                if current_hash and (key not in self.last_data or self.last_data[key] != current_hash):
+                    self.last_data[key] = current_hash
                     message = format_notification('steel_path', data)
                     if message:
                         await self.notify_all('notify_steel_path', message, 'steel_path')
+                        logger.info(f"Steel Path rotation changed! New hash: {current_hash}")
         except Exception as e:
             logger.error(f"Error in check_steel_path: {e}")
     
@@ -229,7 +219,6 @@ class NotificationScheduler:
             logger.error(f"Error in check_alerts: {e}")
     
     async def check_cycles(self):
-        # Земля
         try:
             earth = await WarframeAPI.get_earth_cycle()
             if earth:
@@ -243,7 +232,6 @@ class NotificationScheduler:
         except Exception as e:
             logger.error(f"Error in check_earth_cycle: {e}")
         
-        # Венера
         try:
             venus = await WarframeAPI.get_venus_weather()
             if venus:
@@ -257,7 +245,6 @@ class NotificationScheduler:
         except Exception as e:
             logger.error(f"Error in check_venus_weather: {e}")
         
-        # Деймос
         try:
             deimos = await WarframeAPI.get_deimos_cycle()
             if deimos:
@@ -271,7 +258,6 @@ class NotificationScheduler:
         except Exception as e:
             logger.error(f"Error in check_deimos_cycle: {e}")
         
-        # Дувири
         try:
             duviri = await WarframeAPI.get_duviri_mood()
             if duviri:
@@ -303,7 +289,6 @@ class NotificationScheduler:
             logger.error(f"Error in check_nightwave: {e}")
     
     async def notify_all(self, setting_name, message, notification_type):
-        """Отправка уведомлений всем пользователям с включенным типом"""
         try:
             user_ids = await self.get_users_with_setting(setting_name)
             
@@ -313,9 +298,7 @@ class NotificationScheduler:
             
             logger.info(f"Sending {notification_type} to {len(user_ids)} users")
             
-            # Отправляем с ограничением скорости
             for i, user_id in enumerate(user_ids):
-                # Добавляем небольшую задержку между пользователями
                 if i > 0:
                     await asyncio.sleep(0.1)
                 
@@ -325,15 +308,12 @@ class NotificationScheduler:
             logger.error(f"Error in notify_all for {setting_name}: {e}")
     
     async def send_notification(self, telegram_id, message, notification_type):
-        """Отправка одного уведомления с rate limiting"""
         now = datetime.utcnow()
         last_send = self.last_send_time.get(telegram_id)
         
-        # Проверяем rate limit
         if last_send:
             time_diff = (now - last_send).total_seconds()
             if time_diff < self.rate_limit:
-                # Ставим в очередь
                 add_to_queue(telegram_id, notification_type, message)
                 logger.debug(f"Rate limited {telegram_id}, queued {notification_type}")
                 return
@@ -350,5 +330,4 @@ class NotificationScheduler:
             
         except Exception as e:
             logger.error(f"Error sending to {telegram_id}: {e}")
-            # При ошибке добавляем в очередь для повторной попытки
             add_to_queue(telegram_id, notification_type, message)
